@@ -99,7 +99,11 @@ struct PixelClockSettings {
 }
 
 struct PixelClockLayout {
+    private static let meridiemScale: CGFloat = 0.43
+    private static let meridiemGap: CGFloat = 0.4
+
     let unit: CGFloat
+    let meridiemUnit: CGFloat
     let contentFrame: CGRect
     let calendarOrigin: CGPoint?
     let timeOrigin: CGPoint
@@ -108,30 +112,33 @@ struct PixelClockLayout {
 
     init(size: CGSize, settings: PixelClockSettings, time: String, meridiem: String) {
         let timeColumns = PixelClockGlyphs.columns(for: time)
-        let meridiemColumns = meridiem.isEmpty ? 0 : 5
+        let meridiemColumns = meridiem.isEmpty ? 0 : Int(ceil(Self.meridiemGap + CGFloat(PixelClockGlyphs.columns(for: meridiem)) * Self.meridiemScale))
         let rightColumns = max(timeColumns + meridiemColumns, settings.showWeek ? 27 : 0)
-        let totalColumns = rightColumns + (settings.showDate ? 11 : 0)
-        let rightRows = settings.showWeek ? 7 : 5
-        let totalRows = max(rightRows, settings.showDate ? 8 : 0)
+        let rightStartColumn = settings.showDate ? 10 : 0
+        let totalColumns = rightStartColumn + rightColumns
+        let totalRows = settings.showDate ? 8 : (settings.showWeek ? 7 : 5)
         let inset = min(42, max(10, size.height * 0.07))
         let availableWidth = max(1, size.width - inset * 2)
         let availableHeight = max(1, size.height - inset * 2)
         unit = max(1, floor(min(availableWidth / CGFloat(totalColumns),
                                 availableHeight / CGFloat(totalRows),
                                 size.height * settings.size.heightFactor)))
+        meridiemUnit = unit * Self.meridiemScale
         contentFrame = CGRect(x: floor((size.width - CGFloat(totalColumns) * unit) / 2),
                               y: floor((size.height - CGFloat(totalRows) * unit) / 2),
                               width: CGFloat(totalColumns) * unit,
                               height: CGFloat(totalRows) * unit)
         calendarOrigin = settings.showDate ? contentFrame.origin : nil
-        let rightX = contentFrame.minX + (settings.showDate ? 11 * unit : 0)
-        let rightY = contentFrame.minY + CGFloat(totalRows - rightRows) * unit / 2
-        timeOrigin = CGPoint(x: rightX + (CGFloat(rightColumns - timeColumns - meridiemColumns) * unit / 2),
-                             y: rightY)
-        meridiemOrigin = meridiem.isEmpty ? nil : CGPoint(x: timeOrigin.x + CGFloat(timeColumns + 1) * unit,
-                                                          y: timeOrigin.y + 2.7 * unit)
-        weekOrigin = settings.showWeek ? CGPoint(x: rightX + CGFloat(rightColumns - 27) * unit / 2,
-                                                  y: rightY + 6 * unit) : nil
+        // Calendar, time, and weekdays occupy integer cells of the same LED grid.
+        // The optional AM/PM label is a smaller annotation beside the time.
+        let rightStartX = contentFrame.minX + CGFloat(rightStartColumn) * unit
+        let spareColumns = rightColumns - timeColumns - meridiemColumns
+        let timeStartColumn = min(spareColumns, (spareColumns + 1) / 2 + (settings.showDate ? 1 : 0))
+        timeOrigin = CGPoint(x: rightStartX + CGFloat(timeStartColumn) * unit,
+                             y: contentFrame.minY + (settings.showDate ? unit : 0))
+        meridiemOrigin = meridiem.isEmpty ? nil : CGPoint(x: timeOrigin.x + (CGFloat(timeColumns) + Self.meridiemGap) * unit,
+                                                          y: timeOrigin.y + (5 * (unit - meridiemUnit)) / 2)
+        weekOrigin = settings.showWeek ? CGPoint(x: rightStartX, y: contentFrame.minY + CGFloat(totalRows - 1) * unit) : nil
     }
 }
 
@@ -170,7 +177,7 @@ struct PixelClockFace: View {
             PixelClockGlyphs.draw(time, at: layout.timeOrigin, unit: layout.unit,
                                   context: context, color: foreground)
             if let origin = layout.meridiemOrigin {
-                PixelClockGlyphs.draw(meridiem, at: origin, unit: layout.unit * 0.43,
+                PixelClockGlyphs.draw(meridiem, at: origin, unit: layout.meridiemUnit,
                                       context: context, color: foreground)
             }
             if let origin = layout.weekOrigin {

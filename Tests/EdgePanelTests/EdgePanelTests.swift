@@ -343,6 +343,26 @@ final class EdgePanelTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(calendarLayout.contentFrame.minX, 0)
         XCTAssertLessThanOrEqual(calendarLayout.contentFrame.maxX, referenceSize.width)
         XCTAssertLessThanOrEqual(calendarLayout.contentFrame.maxY, referenceSize.height)
+        let calendarOrigin = try XCTUnwrap(calendarLayout.calendarOrigin)
+        let weekOrigin = try XCTUnwrap(calendarLayout.weekOrigin)
+        XCTAssertEqual(weekOrigin.x, calendarOrigin.x + 10 * calendarLayout.unit)
+        XCTAssertEqual(weekOrigin.y, calendarOrigin.y + 7 * calendarLayout.unit)
+        XCTAssertEqual(calendarLayout.timeOrigin.x, calendarOrigin.x + 16 * calendarLayout.unit)
+        XCTAssertEqual(calendarLayout.timeOrigin.y, calendarOrigin.y + calendarLayout.unit)
+        XCTAssertEqual((calendarLayout.timeOrigin.x - calendarOrigin.x) / calendarLayout.unit,
+                       floor((calendarLayout.timeOrigin.x - calendarOrigin.x) / calendarLayout.unit))
+
+        let meridiemSettings = PixelClockSettings(["pixel24Hour": "false", "pixelShowAMPM": "true"])
+        let meridiemLayout = PixelClockLayout(size: referenceSize, settings: meridiemSettings,
+                                               time: meridiemSettings.timeText(at: date), meridiem: "AM")
+        let meridiemOrigin = try XCTUnwrap(meridiemLayout.meridiemOrigin)
+        XCTAssertLessThan(meridiemLayout.meridiemUnit, meridiemLayout.unit)
+        XCTAssertEqual(meridiemOrigin.y + 2.5 * meridiemLayout.meridiemUnit,
+                       meridiemLayout.timeOrigin.y + 2.5 * meridiemLayout.unit, accuracy: 0.001)
+        XCTAssertGreaterThan(meridiemOrigin.x,
+                             meridiemLayout.timeOrigin.x + CGFloat(PixelClockGlyphs.columns(for: "01:04")) * meridiemLayout.unit)
+        XCTAssertLessThanOrEqual(meridiemOrigin.x + CGFloat(PixelClockGlyphs.columns(for: "AM")) * meridiemLayout.meridiemUnit,
+                                 meridiemLayout.contentFrame.maxX)
 
         let timeOnly = PixelClockSettings(["pixelShowDate": "false", "pixelShowWeek": "false", "pixelSize": "m"])
         let centeredLayout = PixelClockLayout(size: referenceSize, settings: timeOnly,
@@ -350,6 +370,7 @@ final class EdgePanelTests: XCTestCase {
         XCTAssertNil(centeredLayout.calendarOrigin)
         XCTAssertNil(centeredLayout.weekOrigin)
         XCTAssertLessThan(centeredLayout.unit, calendarLayout.unit)
+        XCTAssertEqual(centeredLayout.timeOrigin.y, centeredLayout.contentFrame.minY)
         XCTAssertTrue(PixelClockGlyphs.calendarCutout(day: 16, row: 2, column: 2))
         XCTAssertTrue(PixelClockGlyphs.calendarCutout(day: 16, row: 2, column: 5))
         XCTAssertFalse(PixelClockGlyphs.calendarCutout(day: 16, row: 2, column: 0))
@@ -360,6 +381,7 @@ final class EdgePanelTests: XCTestCase {
         let date = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-09-16T18:57:00Z"))
         let variants: [(String, PixelClockSettings)] = [
             ("calendar", PixelClockSettings(["pixelTimeZone": "UTC"])),
+            ("calendar-ampm", PixelClockSettings(["pixelTimeZone": "UTC", "pixel24Hour": "false", "pixelShowAMPM": "true", "pixelShowSeconds": "true"])),
             ("time-week", PixelClockSettings(["pixelTimeZone": "UTC", "pixelShowDate": "false"])),
             ("time-only", PixelClockSettings(["pixelTimeZone": "UTC", "pixelShowDate": "false", "pixelShowWeek": "false"]))
         ]

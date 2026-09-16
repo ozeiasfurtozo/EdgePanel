@@ -8,8 +8,8 @@
   <key>CFBundleName</key><string>EdgePanel</string>
   <key>CFBundleDisplayName</key><string>EdgePanel</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.8.4</string>
-  <key>CFBundleVersion</key><string>28</string>
+  <key>CFBundleShortVersionString</key><string>0.8.5</string>
+  <key>CFBundleVersion</key><string>29</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>NSPrincipalClass</key><string>NSApplication</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>

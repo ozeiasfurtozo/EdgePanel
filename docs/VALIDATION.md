@@ -1,6 +1,6 @@
 # Validation status
 
-This document distinguishes checks completed for the local EdgePanel 0.8.4 build from release checks that remain open. The app targets Apple Silicon and macOS 14+, but the available development Mac runs macOS 26.6.2. A build on that Mac does not establish macOS 14 compatibility.
+This document distinguishes checks completed for local EdgePanel builds from release checks that remain open. The app targets Apple Silicon and macOS 14+, but the available development Mac runs macOS 26.6.2. A build on that Mac does not establish macOS 14 compatibility.
 
 ## Completed locally
 
