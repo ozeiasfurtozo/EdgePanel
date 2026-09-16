@@ -228,7 +228,9 @@ struct EditorView: View {
                         Spacer()
                         Button(role: .destructive) { model.removeTile(tile.id) } label: { Label(L("Remover", "Remove"), systemImage: "trash") }
                     }
-                    TextField(L("Título", "Title"), text: tileBinding(tile.id, get: { $0.title }, set: { $0.title = $1 }))
+                    if tile.kind != .launcher {
+                        TextField(L("Título", "Title"), text: tileBinding(tile.id, get: { $0.title }, set: { $0.title = $1 }))
+                    }
                     HStack {
                         Text("X \(tile.x) · Y \(tile.y) · \(tile.width) × \(tile.height)")
                             .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
@@ -369,15 +371,16 @@ struct EditorView: View {
             }
 
             if tile.kind == .launcher {
-                Toggle(L("Mostrar nome do app", "Show app name"), isOn: pixelSwitch(tile, "launcherShowName"))
                 Picker(L("Tamanho do ícone", "Icon size"), selection: pixelSetting(tile, "launcherIconSize", default: "normal")) {
                     Text(L("Normal", "Normal")).tag("normal")
                     Text(L("Grande", "Large")).tag("large")
                 }.pickerStyle(.segmented)
             }
 
-            tileColorPicker(L("Cor de destaque", "Accent color"), tile: tile,
-                             key: "nativeAccent", default: nativeAccentDefault(tile.kind))
+            if tile.kind != .launcher {
+                tileColorPicker(L("Cor de destaque", "Accent color"), tile: tile,
+                                key: "nativeAccent", default: nativeAccentDefault(tile.kind))
+            }
 
             Button(L("Restaurar padrão", "Restore defaults")) {
                 model.updateTile(tile.id) { updated in

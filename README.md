@@ -7,7 +7,7 @@ The project targets Apple Silicon and macOS 14 or later. Development and local t
 ## Features
 
 - Pages, profiles, independent page backgrounds, dark/light themes, and a live editor: moving or resizing a widget updates the XENEON before the change is saved.
-- Native clock, CPU, memory, network, application launcher, timer, web, Pixel Clock, and Pixel Dashboard widgets. The application widget displays the selected app's icon. Native widgets have per-instance appearance controls.
+- Native clock, CPU, memory, network, application launcher, timer, web, Pixel Clock, and Pixel Dashboard widgets. The 2 × 2 application widget shows the selected app's icon with its name underneath, without a card or heading. Native widgets have per-instance appearance controls.
 - Single-touch click and drag redirection to the explicitly selected XENEON display, with orientation controls and a calibration overlay.
 - Physical brightness control through the bundled DDC/CI helper, with an explicit **Apply** action.
 - Partial `.icuewidget` import and runtime support, including CPU and RAM sensors. Each imported instance has its own WKWebView and storage. Network access is disabled until the user allows a requested HTTPS domain.

@@ -352,9 +352,8 @@ private struct Sparkline: View {
 
 struct ApplicationWidget: View {
     let tile: Tile
-    let compact: Bool
     let editing: Bool
-    let dark: Bool
+    let ink: Color
 
     private var validApp: Bool {
         !tile.value.isEmpty && FileManager.default.fileExists(atPath: tile.value)
@@ -367,80 +366,44 @@ struct ApplicationWidget: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let ink = dark ? Color.white : Color(red: 0.08, green: 0.13, blue: 0.19)
-            let accent = PixelClockSettings.color(tile.settings["nativeAccent"] ?? "", fallback:
-                dark ? Color(red: 0.67, green: 0.89, blue: 0.48) :
-                    Color(red: 0.18, green: 0.48, blue: 0.21))
-            let showName = tile.settings["launcherShowName"] != "false"
+            let compact = geometry.size.width < 150 || geometry.size.height < 150
             let largeIcon = tile.settings["launcherIconSize"] == "large"
-            let iconSide = min(geometry.size.height * (largeIcon ? 0.70 : 0.50),
-                               geometry.size.width * (largeIcon ? 0.48 : 0.32))
+            let iconSide = min(geometry.size.height * (largeIcon ? 0.64 : 0.54),
+                               geometry.size.width * (largeIcon ? 0.72 : 0.60))
 
             Button {
                 guard validApp else { return }
                 NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: tile.value),
                                                    configuration: NSWorkspace.OpenConfiguration())
             } label: {
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack {
-                        Text(tile.title.uppercased())
-                            .font(.system(size: compact ? 9 : 12, weight: .semibold, design: .monospaced))
-                            .tracking(compact ? 0.6 : 1.5)
-                            .foregroundStyle(ink.opacity(0.55))
-                            .lineLimit(1)
-                        Spacer(minLength: 5)
+                VStack(spacing: compact ? 3 : 8) {
+                    Spacer(minLength: 0)
+                    Group {
                         if validApp {
-                            Image(systemName: "arrow.up.right")
-                                .font(.system(size: compact ? 10 : 15, weight: .semibold))
-                                .foregroundStyle(accent)
+                            Image(nsImage: NSWorkspace.shared.icon(forFile: tile.value))
+                                .resizable()
+                                .interpolation(.high)
+                                .aspectRatio(contentMode: .fit)
+                        } else {
+                            Image(systemName: "square.dashed")
+                                .resizable()
+                                .scaledToFit()
+                                .foregroundStyle(ink.opacity(0.45))
+                                .padding(iconSide * 0.20)
                         }
                     }
-
-                    Spacer(minLength: 2)
-
-                    HStack(alignment: .center, spacing: compact ? 9 : 18) {
-                        if !showName { Spacer(minLength: 0) }
-                        Group {
-                            if validApp {
-                                Image(nsImage: NSWorkspace.shared.icon(forFile: tile.value))
-                                    .resizable()
-                                    .interpolation(.high)
-                                    .aspectRatio(contentMode: .fit)
-                            } else {
-                                Image(systemName: "square.dashed")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .foregroundStyle(accent.opacity(0.8))
-                                    .padding(iconSide * 0.20)
-                            }
-                        }
-                        .frame(width: iconSide, height: iconSide)
-                        .padding(compact ? 3 : 8)
-                        .background(accent.opacity(dark ? 0.10 : 0.12),
-                                    in: RoundedRectangle(cornerRadius: compact ? 10 : 22))
-
-                        if showName {
-                            VStack(alignment: .leading, spacing: compact ? 2 : 8) {
-                                Text(appName)
-                                    .font(.system(size: compact ? 13 : 30, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(ink)
-                                    .lineLimit(2)
-                                    .minimumScaleFactor(0.7)
-                                if !compact {
-                                    Text(validApp ? L("ABRIR APLICATIVO", "OPEN APPLICATION") :
-                                         L("CONFIGURE NO EDITOR", "SET UP IN EDITOR"))
-                                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                                        .tracking(1)
-                                        .foregroundStyle(ink.opacity(0.46))
-                                }
-                            }
-                        }
-                        Spacer(minLength: 0)
-                    }
-
-                    Spacer(minLength: 2)
+                    .frame(width: iconSide, height: iconSide)
+                    Text(appName)
+                        .font(.system(size: compact ? 11 : min(22, geometry.size.width * 0.10),
+                                      weight: .medium, design: .rounded))
+                        .foregroundStyle(ink)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
+                        .frame(maxWidth: .infinity)
+                    Spacer(minLength: 0)
                 }
-                .frame(width: geometry.size.width, height: geometry.size.height, alignment: .leading)
+                .padding(.horizontal, compact ? 3 : 10)
+                .frame(width: geometry.size.width, height: geometry.size.height)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

@@ -266,7 +266,19 @@ struct TileSurface: View {
     @ViewBuilder var body: some View {
         if !editing && [.icue, .pixelClock, .pixelDash].contains(tile.kind) {
             content(compact: false).frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if [.clock, .cpu, .memory, .network, .launcher].contains(tile.kind) {
+        } else if tile.kind == .launcher {
+            ApplicationWidget(tile: tile, editing: editing,
+                              ink: DashboardColors.foreground(page: model.currentPage, dark: model.config.darkMode))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .overlay {
+                    if editing && model.selectedTileID == tile.id {
+                        RoundedRectangle(cornerRadius: 12)
+                            .strokeBorder(model.tilePreviewRejected ? Color.red : Color.cyan, lineWidth: 2)
+                    }
+                }
+                .gesture(editing ? TapGesture().onEnded { model.selectedTileID = tile.id } : nil)
+        } else if [.clock, .cpu, .memory, .network].contains(tile.kind) {
             styledContent
         } else {
             framedContent
@@ -312,8 +324,6 @@ struct TileSurface: View {
                              settings: NativeClockSettings(tile.settings))
         case .cpu, .memory, .network:
             PerformanceWidget(tile: tile, metrics: metrics, compact: compact, dark: dark)
-        case .launcher:
-            ApplicationWidget(tile: tile, compact: compact, editing: editing, dark: dark)
         default:
             EmptyView()
         }

@@ -164,7 +164,14 @@ import ServiceManagement
 
     func addTile(_ kind: WidgetKind, importedID: UUID? = nil) {
         guard let p = profileIndex, let q = pageIndex else { return }
-        let width = kind == .pixelDash ? 16 : (kind == .pixelClock ? 8 : (kind == .web || kind == .icue ? 6 : 4))
+        let width: Int
+        switch kind {
+        case .pixelDash: width = 16
+        case .pixelClock: width = 8
+        case .web, .icue: width = 6
+        case .launcher: width = 2
+        default: width = 4
+        }
         var tile = Tile(kind: kind, width: width, height: kind == .pixelDash ? 4 : 2)
         tile.importedID = importedID
         if let importedID, let imported = imports.first(where: { $0.id == importedID }) { tile.title = imported.name }
