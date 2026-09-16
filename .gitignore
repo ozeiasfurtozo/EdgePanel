@@ -9,3 +9,4 @@ DerivedData/
 *.p8
 *.mobileprovision
 *.dmg
+.edgepanel-signing-identity

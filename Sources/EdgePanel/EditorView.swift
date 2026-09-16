@@ -12,61 +12,42 @@ struct EditorView: View {
     @State private var showingLibrary = false
     @State private var openPickerAfterLibrary = false
 
+    private var palette: EditorPalette { EditorPalette(dark: model.config.darkMode) }
+
     var body: some View {
         HStack(spacing: 0) {
-            sidebar.frame(width: 245)
-            Divider()
-            VStack(alignment: .leading, spacing: 15) {
-                HStack {
-                    Text("XENEON EDGE").font(.system(size: 23, weight: .bold, design: .rounded))
-                    Spacer()
-                    Button { model.displays.refresh() } label: { Image(systemName: "arrow.clockwise") }
-                    Button(L("Biblioteca iCUE", "iCUE library")) { showingLibrary = true }
-                    Menu {
-                        ForEach(WidgetKind.allCases.filter { $0 != .icue }) { kind in
-                            Button(kind.title) { model.addTile(kind) }
-                        }
-                    } label: { Label(L("Adicionar widget", "Add widget"), systemImage: "plus") }
-                    .disabled(model.currentPage == nil)
-                }
-                if model.config.touchEnabled && !touch.inputMonitoringGranted {
-                    HStack(alignment: .top, spacing: 12) {
-                        Image(systemName: "hand.point.up.left.fill")
-                            .font(.title3)
-                            .foregroundStyle(.orange)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(L("O macOS ainda controla o toque", "macOS is still handling touch"))
-                                .font(.subheadline.weight(.semibold))
-                            Text(L("Permita Monitoramento de Entrada para o EdgePanel. Sem essa permissão, os toques continuam a clicar no monitor em foco.",
-                                   "Allow Input Monitoring for EdgePanel. Without it, touches still click on the focused display."))
-                                .font(.caption)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        Spacer(minLength: 8)
-                        VStack(alignment: .trailing, spacing: 6) {
-                            Button(L("Abrir definição", "Open setting")) { openInputMonitoring() }
-                            Button(L("Verificar novamente", "Check again")) { touch.refreshPermissions() }
-                                .buttonStyle(.link)
-                        }
+            sidebar.frame(width: 260)
+            Rectangle().fill(palette.stroke).frame(width: 1)
+            GeometryReader { geometry in
+                let previewHeight = min(300, max(220, (geometry.size.width - 52) / 4 + 46))
+                VStack(alignment: .leading, spacing: 13) {
+                    editorToolbar
+                    if model.config.touchEnabled && !touch.inputMonitoringGranted {
+                        touchWarning
                     }
-                    .padding(12)
-                    .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                    if let page = model.currentPage {
+                        pageHeading(page)
+                        ZStack {
+                            DashboardPreview(model: model, page: page)
+                                .id(page.id)
+                                .transition(.opacity.combined(with: .offset(y: model.pageNavigationDirection > 0 ? 24 : -24)))
+                        }
+                        .frame(height: previewHeight)
+                        .clipped()
+                        Label(L("Arraste widgets para editar · ⌃⇧↑/↓ troca de página",
+                                "Drag widgets to edit · ⌃⇧↑/↓ switches pages"), systemImage: "hand.draw")
+                            .font(.caption)
+                            .foregroundStyle(palette.muted)
+                    } else {
+                        ContentUnavailableView(L("Sem página", "No page"), systemImage: "rectangle.stack")
+                    }
+                    inspectorCard.frame(maxHeight: .infinity, alignment: .top)
                 }
-                if let page = model.currentPage {
-                    Text(page.name).font(.headline)
-                    DashboardPreview(model: model, page: page)
-                        .frame(maxWidth: .infinity)
-                    Text(L("Arraste para mover ou redimensionar. O painel atualiza durante o movimento.",
-                           "Drag to move or resize. The dashboard updates as you move."))
-                        .font(.caption).foregroundStyle(.secondary)
-                } else {
-                    ContentUnavailableView(L("Sem página", "No page"), systemImage: "rectangle.stack")
-                }
-                Divider()
-                inspector.frame(maxHeight: .infinity, alignment: .top)
+                .padding(18)
+                .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
             }
-            .padding(20)
         }
+        .background(palette.background)
         .frame(minWidth: 1000, minHeight: 700)
         .preferredColorScheme(model.config.darkMode ? .dark : .light)
         .sheet(isPresented: $showingLibrary, onDismiss: {
@@ -76,6 +57,129 @@ struct EditorView: View {
             }
         }) { librarySheet.frame(width: 630, height: 510) }
         .onChange(of: model.libraryOpenRequest) { _, _ in showingLibrary = true }
+    }
+
+    private var editorToolbar: some View {
+        HStack(spacing: 10) {
+            EdgeMark().frame(width: 38, height: 38)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("EDGE PANEL")
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .tracking(0.5)
+                Text(L("Estúdio XENEON", "XENEON studio"))
+                    .font(.caption)
+                    .foregroundStyle(palette.muted)
+            }
+            Spacer(minLength: 8)
+            Button { model.displays.refresh() } label: { Image(systemName: "arrow.clockwise") }
+                .buttonStyle(.bordered)
+                .help(L("Atualizar monitores", "Refresh displays"))
+            Button { showingLibrary = true } label: {
+                Label(L("Biblioteca iCUE", "iCUE library"), systemImage: "square.stack.3d.up")
+            }
+            .buttonStyle(.bordered)
+            Menu {
+                ForEach(WidgetKind.allCases.filter { $0 != .icue }) { kind in
+                    if kind == .actionDeck {
+                        Button(L("Deck de Ações mini", "Mini Action Deck")) { model.addTile(kind, deckPreset: .mini) }
+                        Button(L("Deck de Ações compacto", "Compact Action Deck")) { model.addTile(kind) }
+                        Button(L("Deck de Ações em tela cheia", "Full-page Action Deck")) {
+                            model.addTile(kind, deckPreset: .fullPage)
+                        }
+                    } else {
+                        Button(kind.title) { model.addTile(kind) }
+                    }
+                }
+            } label: {
+                Label(L("Adicionar widget", "Add widget"), systemImage: "plus")
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(palette.accent)
+            .disabled(model.currentPage == nil)
+        }
+        .frame(height: 46)
+    }
+
+    private var touchWarning: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "hand.point.up.left.fill")
+                .font(.title3)
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L("O macOS ainda controla o toque", "macOS is still handling touch"))
+                    .font(.subheadline.weight(.semibold))
+                Text(L("Permita Monitoramento de Entrada para o EdgePanel. Sem essa permissão, os toques continuam a clicar no monitor em foco.",
+                       "Allow Input Monitoring for EdgePanel. Without it, touches still click on the focused display."))
+                    .font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            VStack(alignment: .trailing, spacing: 6) {
+                Button(L("Solicitar acesso", "Request access")) { touch.requestPermissions() }
+                Button(L("Abrir definição", "Open setting")) { openInputMonitoring() }
+                Button(L("Verificar novamente", "Check again")) { touch.refreshPermissions() }
+                    .buttonStyle(.link)
+            }
+        }
+        .padding(12)
+        .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func pageHeading(_ page: DashboardPage) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(page.name)
+                    .font(.system(size: 21, weight: .semibold, design: .rounded))
+                    .lineLimit(1)
+                Text(L("\(page.tiles.count) widgets nesta página", "\(page.tiles.count) widgets on this page"))
+                    .font(.caption)
+                    .foregroundStyle(palette.muted)
+            }
+            Spacer()
+            if let p = model.profileIndex, let q = model.pageIndex,
+               model.config.profiles[p].pages.count > 1 {
+                HStack(spacing: 5) {
+                    Button { model.navigatePage(by: -1) } label: { Image(systemName: "chevron.up") }
+                        .disabled(q == 0)
+                        .help(L("Página anterior · Control Shift ↑", "Previous page · Control Shift ↑"))
+                    Text("\(q + 1) / \(model.config.profiles[p].pages.count)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(palette.muted)
+                        .frame(minWidth: 40)
+                    Button { model.navigatePage(by: 1) } label: { Image(systemName: "chevron.down") }
+                        .disabled(q == model.config.profiles[p].pages.count - 1)
+                        .help(L("Próxima página · Control Shift ↓", "Next page · Control Shift ↓"))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+            Button { model.selectedTileID = nil } label: {
+                Label(L("Configurações da página", "Page settings"), systemImage: "paintpalette")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+    }
+
+    private var inspectorCard: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 7) {
+                Image(systemName: "slider.horizontal.3")
+                    .foregroundStyle(palette.accent)
+                Text(L("INSPETOR", "INSPECTOR"))
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .tracking(1.4)
+                    .foregroundStyle(palette.muted)
+                Spacer()
+                Text(model.selectedTile?.kind.title ?? L("Página", "Page"))
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(palette.muted)
+            }
+            inspector.frame(maxHeight: .infinity, alignment: .top)
+        }
+        .padding(14)
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: 17))
+        .overlay(RoundedRectangle(cornerRadius: 17).strokeBorder(palette.stroke, lineWidth: 1))
     }
 
     private func openWidgetPicker() {
@@ -101,22 +205,46 @@ struct EditorView: View {
 
     private var sidebar: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                Label(L("Painel", "Dashboard"), systemImage: "rectangle.3.group")
-                    .font(.headline).padding(.top, 16)
+            VStack(alignment: .leading, spacing: 13) {
+                HStack(spacing: 10) {
+                    Image(systemName: "square.grid.2x2.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(palette.accent)
+                        .frame(width: 34, height: 34)
+                        .background(palette.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(L("ÁREA DE TRABALHO", "WORKSPACE"))
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .tracking(1.2)
+                            .foregroundStyle(palette.muted)
+                        Text(L("Organizar painel", "Organize dashboard"))
+                            .font(.subheadline.weight(.semibold))
+                    }
+                }
+                .padding(.top, 18)
+                .padding(.bottom, 5)
                 GroupBox(L("Perfis", "Profiles")) {
                     VStack(alignment: .leading, spacing: 5) {
                         ForEach(model.config.profiles) { profile in
-                            HStack {
-                                Button(profile.name) { model.selectProfile(profile.id) }
+                            let selected = model.config.selectedProfileID == profile.id
+                            HStack(spacing: 7) {
+                                Button { model.selectProfile(profile.id) } label: {
+                                    Label(profile.name, systemImage: selected ? "square.stack.3d.up.fill" : "square.stack.3d.up")
+                                        .lineLimit(1)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
                                     .buttonStyle(.plain)
-                                    .fontWeight(model.config.selectedProfileID == profile.id ? .bold : .regular)
-                                Spacer()
+                                    .fontWeight(selected ? .semibold : .regular)
                                 if model.config.profiles.count > 1 {
                                     Button { model.removeProfile(profile.id) } label: { Image(systemName: "minus.circle") }
                                         .buttonStyle(.plain).help(L("Apagar perfil", "Delete profile"))
                                 }
                             }
+                            .foregroundStyle(selected ? palette.accent : Color.primary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 7)
+                            .background(selected ? palette.accent.opacity(0.13) : Color.clear,
+                                        in: RoundedRectangle(cornerRadius: 9))
                         }
                         Button { model.addProfile() } label: { Label(L("Novo perfil", "New profile"), systemImage: "plus") }
                             .buttonStyle(.link)
@@ -132,11 +260,15 @@ struct EditorView: View {
                     VStack(alignment: .leading, spacing: 5) {
                         if let p = model.profileIndex {
                             ForEach(model.config.profiles[p].pages) { page in
-                                HStack {
-                                    Button(page.name) { model.selectPage(page.id) }
+                                let selected = model.config.selectedPageID == page.id
+                                HStack(spacing: 5) {
+                                    Button { model.selectPage(page.id) } label: {
+                                        Label(page.name, systemImage: selected ? "rectangle.fill" : "rectangle")
+                                            .lineLimit(1)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
                                         .buttonStyle(.plain)
-                                        .fontWeight(model.config.selectedPageID == page.id ? .bold : .regular)
-                                    Spacer()
+                                        .fontWeight(selected ? .semibold : .regular)
                                     Button { model.movePage(page.id, by: -1) } label: { Image(systemName: "arrow.up") }
                                         .buttonStyle(.plain).disabled(model.config.profiles[p].pages.first?.id == page.id)
                                     Button { model.movePage(page.id, by: 1) } label: { Image(systemName: "arrow.down") }
@@ -146,6 +278,11 @@ struct EditorView: View {
                                             .buttonStyle(.plain).help(L("Apagar página", "Delete page"))
                                     }
                                 }
+                                .foregroundStyle(selected ? palette.accent : Color.primary)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 7)
+                                .background(selected ? palette.accent.opacity(0.13) : Color.clear,
+                                            in: RoundedRectangle(cornerRadius: 9))
                             }
                             Button { model.addPage() } label: { Label(L("Nova página", "New page"), systemImage: "plus") }
                                 .buttonStyle(.link)
@@ -155,14 +292,24 @@ struct EditorView: View {
                 GroupBox(L("Monitor", "Display")) {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(model.displays.displays) { display in
+                            let selected = model.config.selectedDisplay == display.identity
                             Button {
                                 model.selectDisplay(display)
                             } label: {
-                                HStack {
-                                    Image(systemName: model.config.selectedDisplay == display.identity ? "checkmark.circle.fill" : "circle")
+                                HStack(spacing: 7) {
+                                    Image(systemName: selected ? "display.2" : "display")
                                     Text(display.label).lineLimit(2)
+                                    Spacer(minLength: 0)
+                                    if selected { Image(systemName: "checkmark.circle.fill") }
                                 }
-                            }.buttonStyle(.plain)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 7)
+                                .background(selected ? palette.accent.opacity(0.13) : Color.clear,
+                                            in: RoundedRectangle(cornerRadius: 9))
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(selected ? palette.accent : Color.primary)
                         }
                         if model.displays.resolve(model.config.selectedDisplay) == nil {
                             Text(L("Selecione a XENEON. O toque não age em outra tela.", "Select the XENEON. Touch will not target another display."))
@@ -190,6 +337,9 @@ struct EditorView: View {
                         Button(L("Abrir Acessibilidade", "Open Accessibility")) {
                             if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") { NSWorkspace.shared.open(url) }
                         }
+                        if model.config.touchEnabled && touch.inputMonitoringGranted && !touch.canPostEvents {
+                            Button(L("Solicitar Acessibilidade", "Request Accessibility")) { touch.requestPermissions() }
+                        }
                         Button(L("Abrir Monitoramento de Entrada", "Open Input Monitoring")) {
                             openInputMonitoring()
                         }
@@ -210,13 +360,20 @@ struct EditorView: View {
                     }.padding(5)
                 }
                 if !model.message.isEmpty {
-                    Text(model.message).font(.caption).foregroundStyle(.cyan).fixedSize(horizontal: false, vertical: true)
+                    Text(model.message)
+                        .font(.caption)
+                        .foregroundStyle(palette.accent)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(palette.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
                 }
             }
-            .padding(.horizontal, 15)
+            .groupBoxStyle(EditorGroupBoxStyle(palette: palette))
+            .padding(.horizontal, 12)
             .padding(.bottom, 20)
         }
-        .background(Color(NSColor.controlBackgroundColor))
+        .background(palette.sidebar)
     }
 
     @ViewBuilder private var inspector: some View {
@@ -269,6 +426,9 @@ struct EditorView: View {
                     }
                     if tile.kind == .pixelDash {
                         pixelDashControls(tile)
+                    }
+                    if tile.kind == .actionDeck {
+                        ActionDeckEditor(model: model, tile: tile)
                     }
                     if tile.kind == .icue, let imported = model.imported(tile.importedID) {
                         Text("\(imported.name) · \(imported.version)").foregroundStyle(.secondary)
@@ -323,6 +483,19 @@ struct EditorView: View {
                     .buttonStyle(.link)
                     .disabled(model.currentPage?.backgroundHex == nil)
                 }
+                BackgroundImageControls(store: model.store,
+                    filename: Binding(
+                        get: { model.currentPage?.id == page.id ? model.currentPage?.backgroundImage ?? "" : page.backgroundImage ?? "" },
+                        set: { model.setPageBackgroundImage(page.id, filename: $0.isEmpty ? nil : $0) }),
+                    scale: Binding(
+                        get: { model.currentPage?.backgroundScale ?? "fill" },
+                        set: { model.setPageBackgroundPlacement(page.id, scale: $0) }),
+                    horizontal: Binding(
+                        get: { model.currentPage?.backgroundHorizontal ?? "center" },
+                        set: { model.setPageBackgroundPlacement(page.id, horizontal: $0) }),
+                    vertical: Binding(
+                        get: { model.currentPage?.backgroundVertical ?? "center" },
+                        set: { model.setPageBackgroundPlacement(page.id, vertical: $0) }))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.trailing, 8)
@@ -338,8 +511,8 @@ struct EditorView: View {
         tileBinding(tile.id, get: { $0.settings[key] ?? defaultValue }, set: { $0.settings[key] = $1 })
     }
 
-    private func pixelSwitch(_ tile: Tile, _ key: String) -> Binding<Bool> {
-        let value = pixelSetting(tile, key, default: "true")
+    private func pixelSwitch(_ tile: Tile, _ key: String, default defaultValue: Bool = true) -> Binding<Bool> {
+        let value = pixelSetting(tile, key, default: defaultValue ? "true" : "false")
         return Binding(get: { value.wrappedValue == "true" }, set: { value.wrappedValue = $0 ? "true" : "false" })
     }
 
@@ -349,6 +522,7 @@ struct EditorView: View {
             Text(L("Personalização", "Customization")).font(.headline)
 
             if tile.kind == .clock {
+                TimeZoneSelection(identifier: pixelSetting(tile, "clockTimeZone", default: "local"))
                 Picker(L("Formato da hora", "Time format"), selection: pixelSetting(tile, "clockFormat", default: "system")) {
                     Text(L("Sistema", "System")).tag("system")
                     Text("24 h").tag("24")
@@ -387,11 +561,12 @@ struct EditorView: View {
             if tile.kind != .launcher {
                 tileColorPicker(L("Cor de destaque", "Accent color"), tile: tile,
                                 key: "nativeAccent", default: nativeAccentDefault(tile.kind))
+                nativeBackgroundPicker(tile)
             }
 
             Button(L("Restaurar padrão", "Restore defaults")) {
                 model.updateTile(tile.id) { updated in
-                    for key in ["nativeAccent", "nativeShowGraph", "nativeWarningAt", "clockFormat",
+                    for key in ["nativeAccent", "nativeBackground", "nativeShowGraph", "nativeWarningAt", "clockFormat", "clockTimeZone",
                                 "clockFont", "clockShowDate", "clockShowSeconds", "launcherShowName",
                                 "launcherIconSize"] {
                         updated.settings.removeValue(forKey: key)
@@ -415,34 +590,91 @@ struct EditorView: View {
         }
     }
 
+    private func nativeBackgroundPicker(_ tile: Tile) -> some View {
+        let value = tileBinding(tile.id, get: { $0.settings["nativeBackground"] ?? "" },
+                                set: { $0.settings["nativeBackground"] = $1 })
+        let fallback = [.clock, .cpu, .memory, .network].contains(tile.kind) ?
+            (model.config.darkMode ? "#101824" : "#F8FBFD") :
+            (model.config.darkMode ? "#142033" : "#F8FBFD")
+
+        return VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                ColorPicker(L("Cor de fundo", "Background color"), selection: Binding(
+                    get: { HexColor(hex: value.wrappedValue)?.color ?? Color(hex: fallback) },
+                    set: { value.wrappedValue = $0.hexString }
+                ), supportsOpacity: false)
+                TextField("#RRGGBB", text: value, prompt: Text("#RRGGBB"))
+                    .frame(width: 95)
+            }
+            if value.wrappedValue.isEmpty {
+                Text(L("Usando o fundo padrão do tema", "Using the theme's default background"))
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                Button(L("Usar fundo padrão", "Use default background")) {
+                    model.updateTile(tile.id) { $0.settings.removeValue(forKey: "nativeBackground") }
+                }
+                .buttonStyle(.link)
+                .font(.caption)
+            }
+        }
+    }
+
     private func pixelClockControls(_ tile: Tile) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Divider()
             Text(L("Relógio Pixel", "Pixel Clock")).font(.headline)
-            Toggle(L("Mostrar segundos", "Show seconds"), isOn: pixelSwitch(tile, "pixelShowSeconds"))
-            Toggle(L("Mostrar data", "Show date"), isOn: pixelSwitch(tile, "pixelShowDate"))
-            Toggle(L("Indicadores da semana", "Week indicators"), isOn: pixelSwitch(tile, "pixelShowWeek"))
-            Toggle(L("Preencher dias concluídos", "Fill completed weekdays"), isOn: pixelSwitch(tile, "pixelWeekProgress"))
-                .disabled(!pixelSwitch(tile, "pixelShowWeek").wrappedValue)
-            Toggle(L("Semana começa na segunda-feira", "Week starts on Monday"), isOn: pixelSwitch(tile, "pixelWeekStartsMonday"))
-                .disabled(!pixelSwitch(tile, "pixelShowWeek").wrappedValue)
+            Picker(L("Tamanho", "Size"), selection: pixelSetting(tile, "pixelSize", default: "xl")) {
+                Text("S").tag("s")
+                Text("M").tag("m")
+                Text("L").tag("l")
+                Text("XL").tag("xl")
+            }.pickerStyle(.segmented)
             Picker(L("Formato da hora", "Time format"), selection: pixelSetting(tile, "pixel24Hour", default: "true")) {
                 Text("24 h").tag("true")
                 Text("12 h").tag("false")
             }.pickerStyle(.segmented)
-            Picker(L("Fuso horário", "Time zone"), selection: pixelSetting(tile, "pixelTimeZone", default: "local")) {
-                Text(L("Fuso do Mac", "Mac time zone")).tag("local")
-                Text("UTC").tag("UTC")
-                Text("Lisboa").tag("Europe/Lisbon")
-                Text("Londres / London").tag("Europe/London")
-                Text("Nova Iorque / New York").tag("America/New_York")
-                Text("São Paulo").tag("America/Sao_Paulo")
-                Text("Los Angeles").tag("America/Los_Angeles")
-                Text("Tóquio / Tokyo").tag("Asia/Tokyo")
+            TimeZoneSelection(identifier: pixelSetting(tile, "pixelTimeZone", default: "local"))
+            Picker(L("Semana começa", "Week starts on"), selection: pixelSetting(tile, "pixelWeekStartsMonday", default: "false")) {
+                Text(L("Domingo", "Sunday")).tag("false")
+                Text(L("Segunda-feira", "Monday")).tag("true")
             }.pickerStyle(.menu)
-            tileColorPicker(L("Cor dos números", "Digit color"), tile: tile, key: "pixelForeground", default: "#F4F3EE")
-            tileColorPicker(L("Cor de destaque", "Accent color"), tile: tile, key: "pixelAccent", default: "#FF6464")
-            tileColorPicker(L("Cor de fundo", "Background color"), tile: tile, key: "pixelBackground", default: "#080A0D")
+            Toggle(L("Mostrar segundos", "Show seconds"), isOn: pixelSwitch(tile, "pixelShowSeconds", default: false))
+            Toggle(L("Mostrar AM/PM", "Show AM/PM"), isOn: pixelSwitch(tile, "pixelShowAMPM", default: false))
+                .disabled(pixelSetting(tile, "pixel24Hour", default: "true").wrappedValue == "true")
+            Toggle(L("Mostrar calendário", "Show calendar"), isOn: pixelSwitch(tile, "pixelShowDate"))
+            Toggle(L("Mostrar dias da semana", "Show weekday dashes"), isOn: pixelSwitch(tile, "pixelShowWeek"))
+            Toggle(L("Preencher dias anteriores", "Fill past weekdays"), isOn: pixelSwitch(tile, "pixelWeekProgress", default: false))
+                .disabled(!pixelSwitch(tile, "pixelShowWeek").wrappedValue)
+            Divider()
+            Toggle(L("Estilo personalizado", "Custom style"), isOn: pixelSwitch(tile, "pixelCustomStyle"))
+            VStack(alignment: .leading, spacing: 12) {
+                tileColorPicker(L("Cor do texto", "Text color"), tile: tile, key: "pixelForeground", default: "#FFFFFF")
+                tileColorPicker(L("Cor de destaque", "Accent color"), tile: tile, key: "pixelAccent", default: "#FF4048")
+                tileColorPicker(L("Cor de fundo", "Background color"), tile: tile, key: "pixelBackground", default: "#080A0D")
+                let transparency = pixelSetting(tile, "pixelBackgroundTransparency", default: "100")
+                HStack {
+                    Text(L("Transparência do fundo", "Background transparency"))
+                    Slider(value: Binding(
+                        get: { min(100, max(0, Double(transparency.wrappedValue) ?? 100)) },
+                        set: { transparency.wrappedValue = String(Int($0.rounded())) }
+                    ), in: 0...100, step: 1)
+                    Text("\(Int(Double(transparency.wrappedValue) ?? 100))%")
+                        .font(.caption.monospacedDigit())
+                        .frame(width: 38, alignment: .trailing)
+                }
+            }
+            .disabled(!pixelSwitch(tile, "pixelCustomStyle").wrappedValue)
+            Button(L("Restaurar padrão", "Restore defaults")) {
+                model.updateTile(tile.id) { updated in
+                    for key in ["pixelSize", "pixel24Hour", "pixelTimeZone", "pixelWeekStartsMonday",
+                                "pixelShowSeconds", "pixelShowAMPM", "pixelShowDate", "pixelShowWeek",
+                                "pixelWeekProgress", "pixelCustomStyle", "pixelForeground", "pixelAccent",
+                                "pixelBackground", "pixelBackgroundTransparency"] {
+                        updated.settings.removeValue(forKey: key)
+                    }
+                }
+            }
+            .font(.caption)
         }
     }
 
@@ -461,6 +693,30 @@ struct EditorView: View {
                 get: { pixelSetting(tile, "dashRainbow", default: "false").wrappedValue == "true" },
                 set: { pixelSetting(tile, "dashRainbow", default: "false").wrappedValue = $0 ? "true" : "false" }
             ))
+            Picker(L("Texto longo", "Long text"), selection: pixelSetting(tile, "dashTextBehavior", default: "scale")) {
+                Text(L("Ajustar", "Scale to fit")).tag("scale")
+                Text(L("Deslizar", "Scroll")).tag("scroll")
+            }.pickerStyle(.segmented)
+            if tile.settings["dashTextBehavior"] == "scroll" {
+                HStack {
+                    Text(L("Velocidade do texto", "Text speed"))
+                    Slider(value: Binding(
+                        get: { min(20, max(2, Double(pixelSetting(tile, "dashScrollSpeed", default: "8").wrappedValue) ?? 8)) },
+                        set: { pixelSetting(tile, "dashScrollSpeed", default: "8").wrappedValue = String($0) }), in: 2...20)
+                }
+            }
+            Text(L("Clima e social mostram valores inseridos manualmente; não há contas ou serviços conectados.",
+                   "Weather and social show manually entered values; no accounts or providers are connected."))
+                .font(.caption).foregroundStyle(.secondary)
+            TextField(L("Temperatura exibida (ex.: 24°C)", "Displayed temperature (for example, 24°C)"),
+                      text: pixelSetting(tile, "dashWeatherText", default: "--°C"))
+            TextField(L("Número social exibido", "Displayed social number"),
+                      text: pixelSetting(tile, "dashSocialText", default: "----"))
+            Picker(L("Animação", "Animation"), selection: pixelSetting(tile, "dashArt", default: "0")) {
+                Text(L("Onda colorida", "Color wave")).tag("0")
+                Text(L("Coração", "Heart")).tag("1")
+                Text(L("Foguete", "Rocket")).tag("2")
+            }.pickerStyle(.menu)
             Picker(L("Formato da hora", "Time format"), selection: pixelSetting(tile, "dash24Hour", default: "true")) {
                 Text("24 h").tag("true")
                 Text("12 h").tag("false")
@@ -485,7 +741,7 @@ struct EditorView: View {
                 Text(L("Timer: \(min(240, max(1, Int(tile.settings["dashTimerMinutes"] ?? "15") ?? 15))) minutos",
                        "Timer: \(min(240, max(1, Int(tile.settings["dashTimerMinutes"] ?? "15") ?? 15))) minutes"))
             }
-            tileColorPicker(L("Cor de destaque", "Accent color"), tile: tile, key: "dashAccent", default: "#F6C85F")
+            tileColorPicker(L("Cor dos pixels", "Pixel color"), tile: tile, key: "dashAccent", default: "#51DDE9")
         }
     }
 
@@ -746,35 +1002,43 @@ private struct HardwareBrightnessSlider: NSViewRepresentable {
 struct DashboardPreview: View {
     @ObservedObject var model: AppModel
     let page: DashboardPage
+    private var palette: EditorPalette { EditorPalette(dark: model.config.darkMode) }
+
     var body: some View {
         GeometryReader { geometry in
-            let boardWidth = max(0, geometry.size.width - 16)
-            let boardHeight = min(geometry.size.height - 52, boardWidth * 0.25)
+            let boardWidth = min(max(0, geometry.size.width - 20), max(0, geometry.size.height - 52) * 4)
+            let boardHeight = boardWidth / 4
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
-                    Circle().fill(.green).frame(width: 7, height: 7)
+                    Circle().fill(Color(red: 0.27, green: 0.83, blue: 0.60))
+                        .frame(width: 7, height: 7)
                     Text(L("PRÉVIA AO VIVO", "LIVE PREVIEW"))
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
                         .tracking(1.7)
                     Spacer()
                     Text("16 × 4")
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(palette.muted)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(palette.accent.opacity(0.09), in: Capsule())
                 }
-                .padding(.horizontal, 13)
-                .frame(height: 36)
+                .padding(.horizontal, 14)
+                .frame(height: 40)
                 BoardView(model: model, page: page, editing: true)
                     .frame(width: boardWidth, height: boardHeight)
-                    .background(DashboardColors.background(page: page, dark: model.config.darkMode))
-                    .clipShape(RoundedRectangle(cornerRadius: 9))
-                    .padding(.horizontal, 8)
-                    .padding(.bottom, 8)
+                    .background(DashboardBackdrop(page: page, dark: model.config.darkMode, store: model.store))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10)
+                        .strokeBorder(palette.stroke, lineWidth: 1))
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 10)
                 Spacer(minLength: 0)
             }
-            .background(model.config.darkMode ? Color(red: 0.075, green: 0.105, blue: 0.15) : .white,
-                        in: RoundedRectangle(cornerRadius: 15))
-            .overlay(RoundedRectangle(cornerRadius: 15).strokeBorder(Color.cyan.opacity(0.22), lineWidth: 1))
-        }.frame(height: 265)
+            .background(palette.surface, in: RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(palette.stroke, lineWidth: 1))
+        }
     }
 }
 
@@ -785,9 +1049,5 @@ private extension Color {
         Scanner(string: raw).scanHexInt64(&rgb)
         self.init(.sRGB, red: Double((rgb >> 16) & 255) / 255, green: Double((rgb >> 8) & 255) / 255,
                   blue: Double(rgb & 255) / 255, opacity: 1)
-    }
-    var hexString: String {
-        guard let color = NSColor(self).usingColorSpace(.deviceRGB) else { return "#FFFFFF" }
-        return String(format: "#%02X%02X%02X", Int(color.redComponent * 255), Int(color.greenComponent * 255), Int(color.blueComponent * 255))
     }
 }

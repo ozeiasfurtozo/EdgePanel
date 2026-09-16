@@ -1,8 +1,183 @@
 import XCTest
 import Foundation
+import AppKit
+import SwiftUI
 @testable import EdgePanel
 
 final class EdgePanelTests: XCTestCase {
+    @MainActor func testBorderlessDashboardCanReceiveKeyboardFocus() {
+        let window = DashboardWindow(contentRect: CGRect(x: 0, y: 0, width: 640, height: 180),
+                                     styleMask: [.borderless], backing: .buffered, defer: false)
+        XCTAssertTrue(window.canBecomeKey)
+        XCTAssertTrue(DashboardWebView().acceptsFirstMouse(for: nil))
+    }
+
+    @MainActor func testGlobalPageShortcutDetectsSystemArrowConflict() {
+        let controlShiftUp: [String: Any] = ["enabled": 1,
+                                             "value": ["parameters": [65535, 126, 393216]]]
+        XCTAssertTrue(PageHotkeys.systemReservesPrimaryShortcut(in: ["34": controlShiftUp]))
+        XCTAssertFalse(PageHotkeys.systemReservesPrimaryShortcut(in: ["34": ["enabled": 0,
+                                                                     "value": ["parameters": [65535, 126, 393216]]]]))
+        XCTAssertFalse(PageHotkeys.systemReservesPrimaryShortcut(in: ["34": ["enabled": 1,
+                                                                     "value": ["parameters": [65535, 126, 262144]]]]))
+    }
+
+    func testBackgroundImageSizingAndAlignment() throws {
+        let image = CGSize(width: 400, height: 200)
+        let container = CGSize(width: 200, height: 200)
+        XCTAssertEqual(BackgroundGeometry.frame(image: image, container: container,
+                                                scale: "fill", horizontal: "right", vertical: "center"),
+                       CGRect(x: -200, y: 0, width: 400, height: 200))
+        XCTAssertEqual(BackgroundGeometry.frame(image: image, container: container,
+                                                scale: "fit", horizontal: "left", vertical: "bottom"),
+                       CGRect(x: 0, y: 100, width: 200, height: 100))
+        XCTAssertEqual(BackgroundGeometry.frame(image: image, container: container,
+                                                scale: "stretch", horizontal: "left", vertical: "top"),
+                       CGRect(x: 0, y: 0, width: 200, height: 200))
+        XCTAssertEqual(BackgroundGeometry.frame(image: image, container: container,
+                                                scale: "original", horizontal: "center", vertical: "top"),
+                       CGRect(x: -100, y: 0, width: 400, height: 200))
+
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PanelStore(root: directory)
+        var config = DashboardConfig.initial()
+        config.profiles[0].pages[0].backgroundImage = "00000000-0000-0000-0000-000000000000.png"
+        config.profiles[0].pages[0].backgroundScale = "fit"
+        config.profiles[0].pages[0].backgroundHorizontal = "right"
+        config.profiles[0].pages[0].backgroundVertical = "bottom"
+        store.save(config)
+        let restored = store.load().profiles[0].pages[0]
+        XCTAssertEqual(restored.backgroundImage, config.profiles[0].pages[0].backgroundImage)
+        XCTAssertEqual(restored.backgroundScale, "fit")
+        XCTAssertEqual(restored.backgroundHorizontal, "right")
+        XCTAssertEqual(restored.backgroundVertical, "bottom")
+        XCTAssertNil(store.backgroundImage(named: "../dashboard.json"))
+
+        let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Resources/StatusIcon.png")
+        let source = directory.appendingPathComponent("background.png")
+        try FileManager.default.copyItem(at: fixture, to: source)
+        let filename = try store.importBackgroundImage(source)
+        XCTAssertNotNil(store.backgroundImage(named: filename))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.backgroundsURL.appendingPathComponent(filename).path))
+    }
+
+    @MainActor func testActionDeckFitsAnExistingPageAndPersistsButtons() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PanelStore(root: directory)
+        let model = AppModel(store: store)
+        let originalPageID = model.currentPage?.id
+        model.addTile(.actionDeck)
+
+        let tile = try XCTUnwrap(model.selectedTile)
+        XCTAssertEqual(tile.height, 2)
+        XCTAssertEqual(tile.width, 4)
+        XCTAssertEqual(tile.x, 4)
+        XCTAssertEqual(tile.y, 2)
+        XCTAssertEqual(model.currentPage?.id, originalPageID)
+        XCTAssertEqual(model.currentPage?.tiles.count, 6)
+        XCTAssertEqual(DeckSettings.visibleCount(tile.settings), 8)
+        XCTAssertEqual(tile.settings["deckColumns"], "4")
+        XCTAssertEqual(DeckSettings.buttons(tile.settings).count, 16)
+
+        var buttons = DeckSettings.buttons(tile.settings)
+        buttons[0].name = "Build"
+        buttons[0].action = .keySequence
+        buttons[0].strokes = [DeckStroke(keyCode: 0, modifiers: NSEvent.ModifierFlags.command.rawValue, keyName: "A"),
+                              DeckStroke(keyCode: 36, modifiers: 0, keyName: "")]
+        buttons[0].icon = .symbol
+        buttons[0].iconValue = "hammer.fill"
+        buttons[0].colorHex = "#F5C64D"
+        model.updateTile(tile.id) { updated in
+            DeckSettings.save(buttons, to: &updated.settings)
+            updated.settings["deckVisibleCount"] = "12"
+        }
+
+        let restored = try XCTUnwrap(store.load().profiles.flatMap(\.pages).flatMap(\.tiles).first(where: { $0.id == tile.id }))
+        let restoredButtons = DeckSettings.buttons(restored.settings)
+        XCTAssertEqual(restoredButtons[0], buttons[0])
+        XCTAssertEqual(restoredButtons[0].colorHex, "#F5C64D")
+        XCTAssertNil(restoredButtons[1].colorHex)
+        XCTAssertEqual(restoredButtons[0].strokes.map(\.label), ["⌘A", "↩"])
+        XCTAssertEqual(DeckSettings.visibleCount(restored.settings), 12)
+        XCTAssertEqual(DeckSettings.columns(restored.settings, width: 450), 4)
+
+        model.addTile(.actionDeck, deckPreset: .mini)
+        XCTAssertEqual(model.currentPage?.id, originalPageID)
+        XCTAssertEqual(model.selectedTile?.width, 2)
+        XCTAssertEqual(model.selectedTile?.height, 2)
+        XCTAssertEqual(DeckSettings.visibleCount(model.selectedTile?.settings ?? [:]), 4)
+
+        model.addTile(.actionDeck, deckPreset: .fullPage)
+        XCTAssertNotEqual(model.currentPage?.id, originalPageID)
+        XCTAssertEqual(model.selectedTile?.width, 16)
+        XCTAssertEqual(model.selectedTile?.height, 4)
+
+        let wide = DeckGridLayout(count: 16, settings: [:],
+                                  available: CGSize(width: 1280, height: 360), editing: false)
+        XCTAssertEqual(wide.columns, 8)
+        XCTAssertEqual(wide.rows, 2)
+        XCTAssertEqual(wide.width, 1280 - 44, accuracy: 1)
+        XCTAssertLessThanOrEqual(wide.height, 360)
+        let compact = DeckGridLayout(count: 15, settings: ["deckColumns": "5"],
+                                     available: CGSize(width: 850, height: 220), editing: true)
+        XCTAssertEqual(compact.columns, 5)
+        XCTAssertEqual(compact.rows, 3)
+        XCTAssertLessThanOrEqual(compact.width, 850)
+        XCTAssertLessThanOrEqual(compact.height, 220)
+
+        let embedded = DeckGridLayout(count: 8, settings: ["deckColumns": "4"],
+                                      available: CGSize(width: 400, height: 180), editing: true)
+        XCTAssertGreaterThan(embedded.side, 60)
+        XCTAssertLessThan(embedded.width, 400)
+        XCTAssertLessThan(embedded.height, 180)
+
+        let crowded = DeckGridLayout(count: 16, settings: ["deckColumns": "8"],
+                                     available: CGSize(width: 180, height: 120), editing: true)
+        XCTAssertLessThanOrEqual(crowded.width, 180)
+        XCTAssertLessThanOrEqual(crowded.height, 120)
+
+        let legacy = """
+        [{"id":"00000000-0000-0000-0000-000000000001","name":"Legacy","action":"none","value":"","strokes":[],"icon":"symbol","iconValue":"bolt.fill"}]
+        """
+        let decoded = DeckSettings.buttons([DeckSettings.key: legacy])
+        XCTAssertEqual(decoded.first?.name, "Legacy")
+        XCTAssertNil(decoded.first?.colorHex)
+    }
+
+    @MainActor func testPageNavigationFollowsCurrentProfileAndStopsAtEnds() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PanelStore(root: directory)
+        let model = AppModel(store: store)
+        let first = try XCTUnwrap(model.currentPage?.id)
+        model.addPage()
+        let second = try XCTUnwrap(model.currentPage?.id)
+        model.addPage()
+        let third = try XCTUnwrap(model.currentPage?.id)
+
+        XCTAssertNil(model.adjacentPageID(by: 1))
+        XCTAssertFalse(model.navigatePage(by: 1))
+        XCTAssertTrue(model.navigatePage(by: -1))
+        XCTAssertEqual(model.currentPage?.id, second)
+        XCTAssertEqual(model.pageNavigationDirection, -1)
+        XCTAssertTrue(model.navigatePage(by: -1))
+        XCTAssertEqual(model.currentPage?.id, first)
+        XCTAssertFalse(model.navigatePage(by: -1))
+        XCTAssertEqual(model.adjacentPageID(by: 1), second)
+        XCTAssertTrue(model.navigatePage(by: 2))
+        XCTAssertEqual(model.currentPage?.id, third)
+        XCTAssertEqual(model.pageNavigationDirection, 1)
+        XCTAssertEqual(store.load().selectedPageID, third)
+
+        model.addProfile()
+        XCTAssertNil(model.adjacentPageID(by: 1))
+        XCTAssertFalse(model.navigatePage(by: -1))
+    }
+
     func testBrightnessTargetsOnlyTheSelectedDisplayAndParsesDDCValues() throws {
         let xeneon = DisplayIdentity(vendor: 0x0E58, model: 0xED00, serial: 16843009)
         XCTAssertEqual(DDCBrightness.selector(for: xeneon), "basic=3672:60672:16843009")
@@ -73,12 +248,73 @@ final class EdgePanelTests: XCTestCase {
         XCTAssertEqual(PixelDashSettings(loaded.settings).timerRemaining(in: loaded.settings, at: now), 45)
     }
 
+    @MainActor func testPixelDashReferenceModesRenderAtXeneonAspectRatio() throws {
+        XCTAssertEqual(PixelDashMode.dashboardTabs, [.text, .weather, .social, .water, .art, .clock, .timer])
+        let date = Date(timeIntervalSince1970: 1_789_565_600)
+        let variants: [(String, [String: String])] = [
+            ("text", ["dashMode": "text", "dashMessage": "PIXEL//EDGE", "dashRainbow": "true"]),
+            ("weather", ["dashMode": "weather", "dashWeatherText": "24°C"]),
+            ("social", ["dashMode": "social", "dashSocialText": "1600"]),
+            ("water", ["dashMode": "water", "dashWaterGoal": "8",
+                        "dashWaterDay": PixelDashSettings.dayKey(date), "dashWaterCount": "5"]),
+            ("art", ["dashMode": "art"]),
+            ("clock", ["dashMode": "clock", "dashSeconds": "false"])
+        ]
+        for (name, values) in variants {
+            let settings = PixelDashSettings(values)
+            let renderer = ImageRenderer(content:
+                PixelDashMatrix(mode: settings.mode, settings: settings, values: values,
+                                cpu: 32, memory: 64, date: date, openedAt: date)
+                    .frame(width: 1536, height: 330)
+                    .background(Color.black))
+            renderer.scale = 1
+            let image = try XCTUnwrap(renderer.nsImage)
+            let bitmap = try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(image.tiffRepresentation)))
+            XCTAssertEqual(bitmap.pixelsWide, 1536)
+            XCTAssertEqual(bitmap.pixelsHigh, 330)
+            if ProcessInfo.processInfo.environment["EDGE_PIXEL_DASH_SNAPSHOTS"] == "1" {
+                let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+                try png.write(to: URL(fileURLWithPath: "/private/tmp/edgepanel-pixel-dash-\(name).png"))
+            }
+        }
+        XCTAssertEqual(PixelDashSettings(["dashMode": "system"]).mode, .system)
+        XCTAssertEqual(PixelDashSettings(["dashMode": "stopwatch"]).mode, .stopwatch)
+        XCTAssertEqual(PixelDashSettings([:]).weatherText, "--°C")
+        XCTAssertEqual(PixelDashSettings([:]).socialText, "----")
+
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PanelStore(root: directory)
+        var config = DashboardConfig.initial()
+        var tile = Tile(kind: .pixelDash, width: 16, height: 4)
+        tile.settings = variants[0].1
+        config.profiles[0].pages[0].tiles = [tile]
+        store.save(config)
+        let model = AppModel(store: store)
+        let dashboard = ImageRenderer(content:
+            PixelDashTile(model: model, metrics: model.metrics, tile: tile)
+                .frame(width: 1536, height: 446))
+        dashboard.scale = 1
+        let dashboardImage = try XCTUnwrap(dashboard.nsImage)
+        let dashboardBitmap = try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(dashboardImage.tiffRepresentation)))
+        XCTAssertEqual(dashboardBitmap.pixelsWide, 1536)
+        XCTAssertEqual(dashboardBitmap.pixelsHigh, 446)
+        if ProcessInfo.processInfo.environment["EDGE_PIXEL_DASH_SNAPSHOTS"] == "1" {
+            let png = try XCTUnwrap(dashboardBitmap.representation(using: .png, properties: [:]))
+            try png.write(to: URL(fileURLWithPath: "/private/tmp/edgepanel-pixel-dash-full.png"))
+        }
+    }
+
     func testPixelClockRespectsTimeZoneFormatAndWeekStart() throws {
         let date = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-09-16T13:04:05Z"))
         let utc = PixelClockSettings(["pixelTimeZone": "UTC"])
-        XCTAssertEqual(utc.timeText(at: date), "13:04:05")
+        XCTAssertEqual(utc.timeText(at: date), "13:04")
         XCTAssertEqual(utc.meridiem(at: date), "")
-        XCTAssertEqual(utc.weekdayIndex(at: date), 2) // Wednesday in a Monday-first week.
+        XCTAssertEqual(utc.weekdayIndex(at: date), 3) // Wednesday in a Sunday-first week.
+        XCTAssertEqual(utc.dayOfMonth(at: date), 16)
+        XCTAssertFalse(utc.showSeconds)
+        XCTAssertFalse(utc.weekProgress)
+        XCTAssertEqual(utc.backgroundTransparency, 100)
 
         let west = PixelClockSettings(["pixelTimeZone": "America/Los_Angeles",
                                        "pixel24Hour": "false",
@@ -89,31 +325,97 @@ final class EdgePanelTests: XCTestCase {
         XCTAssertEqual(west.weekdayIndex(at: date), 3) // Wednesday in a Sunday-first week.
 
         let nextDay = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-09-19T16:10:00Z"))
-        let tokyo = PixelClockSettings(["pixelTimeZone": "Asia/Tokyo", "pixel24Hour": "false", "pixelShowSeconds": "false"])
+        let tokyo = PixelClockSettings(["pixelTimeZone": "Asia/Tokyo", "pixel24Hour": "false",
+                                        "pixelShowSeconds": "false", "pixelWeekStartsMonday": "true"])
         XCTAssertEqual(tokyo.timeText(at: nextDay), "01:10")
         XCTAssertEqual(tokyo.meridiem(at: nextDay), "AM")
         XCTAssertEqual(tokyo.weekdayIndex(at: nextDay), 6) // Sunday in Tokyo, with a Monday-first week.
+
+        let auckland = PixelClockSettings(["pixelTimeZone": "Pacific/Auckland", "pixelShowSeconds": "true"])
+        XCTAssertEqual(auckland.timeText(at: date), "01:04:05")
+
+        let referenceSize = CGSize(width: 1552, height: 420)
+        let calendarLayout = PixelClockLayout(size: referenceSize, settings: utc,
+                                               time: utc.timeText(at: date), meridiem: "")
+        XCTAssertNotNil(calendarLayout.calendarOrigin)
+        XCTAssertNotNil(calendarLayout.weekOrigin)
+        XCTAssertGreaterThan(calendarLayout.unit, 30)
+        XCTAssertGreaterThanOrEqual(calendarLayout.contentFrame.minX, 0)
+        XCTAssertLessThanOrEqual(calendarLayout.contentFrame.maxX, referenceSize.width)
+        XCTAssertLessThanOrEqual(calendarLayout.contentFrame.maxY, referenceSize.height)
+
+        let timeOnly = PixelClockSettings(["pixelShowDate": "false", "pixelShowWeek": "false", "pixelSize": "m"])
+        let centeredLayout = PixelClockLayout(size: referenceSize, settings: timeOnly,
+                                               time: timeOnly.timeText(at: date), meridiem: "")
+        XCTAssertNil(centeredLayout.calendarOrigin)
+        XCTAssertNil(centeredLayout.weekOrigin)
+        XCTAssertLessThan(centeredLayout.unit, calendarLayout.unit)
+        XCTAssertTrue(PixelClockGlyphs.calendarCutout(day: 16, row: 2, column: 2))
+        XCTAssertTrue(PixelClockGlyphs.calendarCutout(day: 16, row: 2, column: 5))
+        XCTAssertFalse(PixelClockGlyphs.calendarCutout(day: 16, row: 2, column: 0))
+        XCTAssertFalse(PixelClockGlyphs.calendarCutout(day: 16, row: 7, column: 2))
+    }
+
+    @MainActor func testPixelClockRendersReferenceLayouts() throws {
+        let date = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-09-16T18:57:00Z"))
+        let variants: [(String, PixelClockSettings)] = [
+            ("calendar", PixelClockSettings(["pixelTimeZone": "UTC"])),
+            ("time-week", PixelClockSettings(["pixelTimeZone": "UTC", "pixelShowDate": "false"])),
+            ("time-only", PixelClockSettings(["pixelTimeZone": "UTC", "pixelShowDate": "false", "pixelShowWeek": "false"]))
+        ]
+        for (name, settings) in variants {
+            let renderer = ImageRenderer(content: PixelClockFace(settings: settings, date: date)
+                .frame(width: 1552, height: 420).background(.black))
+            renderer.scale = 1
+            let image = try XCTUnwrap(renderer.nsImage)
+            let bitmap = try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(image.tiffRepresentation)))
+            XCTAssertEqual(bitmap.pixelsWide, 1552)
+            XCTAssertEqual(bitmap.pixelsHigh, 420)
+            if ProcessInfo.processInfo.environment["EDGE_PIXEL_CLOCK_SNAPSHOTS"] == "1" {
+                let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+                try png.write(to: URL(fileURLWithPath: "/private/tmp/edgepanel-pixel-clock-\(name).png"))
+            }
+        }
     }
 
     func testNativeClockSettingsAndWidgetCustomizationPersist() throws {
+        XCTAssertTrue(try XCTUnwrap(HexColor(hex: "#FFFFFF")).isLight)
+        XCTAssertFalse(try XCTUnwrap(HexColor(hex: "#101824")).isLight)
+        XCTAssertNil(HexColor(hex: "not-a-color"))
+
         let date = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-09-16T13:04:05Z"))
-        let utc = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
         let settings = NativeClockSettings(["clockFormat": "12", "clockShowDate": "false",
                                             "clockShowSeconds": "false", "clockFont": "mono",
-                                            "nativeAccent": "#AA66CC"])
-        XCTAssertEqual(settings.timeText(at: date, timeZone: utc), "1:04 PM")
+                                            "nativeAccent": "#AA66CC", "clockTimeZone": "UTC"])
+        XCTAssertEqual(settings.timeText(at: date), "1:04 PM")
+        XCTAssertEqual(settings.timeZone.secondsFromGMT(for: date), 0)
         XCTAssertFalse(settings.showDate)
         XCTAssertFalse(settings.showSeconds)
         XCTAssertEqual(settings.accentHex, "#AA66CC")
-        XCTAssertEqual(NativeClockSettings(["clockFormat": "24"]).timeText(at: date, timeZone: utc), "13:04")
+        XCTAssertEqual(NativeClockSettings(["clockFormat": "24", "clockTimeZone": "UTC"]).timeText(at: date), "13:04")
+
+        let midnight = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-09-16T00:30:00Z"))
+        let losAngeles = NativeClockSettings(["clockFormat": "24", "clockTimeZone": "America/Los_Angeles"])
+        let tokyo = NativeClockSettings(["clockFormat": "24", "clockTimeZone": "Asia/Tokyo"])
+        XCTAssertEqual(losAngeles.timeText(at: midnight), "17:30")
+        XCTAssertEqual(tokyo.timeText(at: midnight), "09:30")
+        XCTAssertNotEqual(losAngeles.dateText(at: midnight), tokyo.dateText(at: midnight))
+        XCTAssertNotEqual(NativeClockSettings(["clockTimeZone": "UTC"]).timeText(at: midnight),
+                          NativeClockSettings(["clockTimeZone": "Asia/Tokyo"]).timeText(at: midnight))
+        XCTAssertEqual(NativeClockSettings(["clockTimeZone": "unknown/zone"]).timeZone.identifier,
+                       TimeZone.current.identifier)
 
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = PanelStore(root: directory)
         var config = DashboardConfig.initial()
-        config.profiles[0].pages[0].tiles[0].settings = ["clockFormat": "12", "nativeAccent": "#AA66CC"]
+        config.profiles[0].pages[0].tiles[0].settings = ["clockFormat": "12", "nativeAccent": "#AA66CC",
+                                                        "clockTimeZone": "Asia/Tokyo", "nativeBackground": "#F4C842"]
         store.save(config)
         XCTAssertEqual(store.load().profiles[0].pages[0].tiles[0].settings["nativeAccent"], "#AA66CC")
+        XCTAssertEqual(store.load().profiles[0].pages[0].tiles[0].settings["clockTimeZone"], "Asia/Tokyo")
+        XCTAssertEqual(store.load().profiles[0].pages[0].tiles[0].settings["nativeBackground"], "#F4C842")
+        XCTAssertNil(store.load().profiles[0].pages[0].tiles[1].settings["nativeBackground"])
     }
 
     func testTouchMappingClampsToSelectedDisplay() {

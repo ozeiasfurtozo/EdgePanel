@@ -3,6 +3,7 @@ import SwiftUI
 
 struct NativeClockSettings {
     let timeFormat: String
+    let timeZoneID: String
     let showDate: Bool
     let showSeconds: Bool
     let fontStyle: String
@@ -10,6 +11,7 @@ struct NativeClockSettings {
 
     init(_ values: [String: String]) {
         timeFormat = values["clockFormat"] ?? "system"
+        timeZoneID = values["clockTimeZone"] ?? "local"
         showDate = values["clockShowDate"] != "false"
         showSeconds = values["clockShowSeconds"] != "false"
         fontStyle = values["clockFont"] ?? "rounded"
@@ -24,18 +26,42 @@ struct NativeClockSettings {
         }
     }
 
-    func timeText(at date: Date, timeZone: TimeZone = .current) -> String {
-        guard timeFormat == "12" || timeFormat == "24" else {
-            return date.formatted(date: .omitted, time: .shortened)
-        }
+    var timeZone: TimeZone {
+        timeZoneID == "local" ? .current : TimeZone(identifier: timeZoneID) ?? .current
+    }
+
+    private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZone
+        return calendar
+    }
+
+    func timeText(at date: Date) -> String {
+        guard timeFormat == "12" || timeFormat == "24" else {
+            let formatter = DateFormatter()
+            formatter.locale = .current
+            formatter.timeZone = timeZone
+            formatter.timeStyle = .short
+            return formatter.string(from: date)
+        }
         let parts = calendar.dateComponents([.hour, .minute], from: date)
         let hour = parts.hour ?? 0
         let minute = parts.minute ?? 0
         if timeFormat == "24" { return String(format: "%02d:%02d", hour, minute) }
         return String(format: "%d:%02d %@", hour % 12 == 0 ? 12 : hour % 12,
                       minute, hour < 12 ? "AM" : "PM")
+    }
+
+    func dateText(at date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.timeZone = timeZone
+        formatter.setLocalizedDateFormatFromTemplate("EEEE d MMMM")
+        return formatter.string(from: date)
+    }
+
+    func second(at date: Date) -> Int {
+        calendar.component(.second, from: date)
     }
 }
 
@@ -54,8 +80,8 @@ struct SmokeClockWidget: View {
 
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 let time = settings.timeText(at: context.date)
-                let date = context.date.formatted(.dateTime.weekday(.wide).day().month(.wide))
-                let seconds = Calendar.current.component(.second, from: context.date)
+                let date = settings.dateText(at: context.date)
+                let seconds = settings.second(at: context.date)
 
                 ZStack(alignment: .leading) {
                     Ellipse()
@@ -71,8 +97,13 @@ struct SmokeClockWidget: View {
                             Text(title.uppercased())
                                 .lineLimit(1)
                             Spacer(minLength: 5)
-                            Circle().fill(haze.opacity(0.8))
-                                .frame(width: compact ? 4 : 6, height: compact ? 4 : 6)
+                            if settings.timeZoneID == "local" {
+                                Circle().fill(haze.opacity(0.8))
+                                    .frame(width: compact ? 4 : 6, height: compact ? 4 : 6)
+                            } else {
+                                Text(settings.timeZone.abbreviation(for: context.date) ?? settings.timeZone.identifier)
+                                    .lineLimit(1)
+                            }
                         }
                         .font(.system(size: compact ? 9 : 12, weight: .semibold, design: .monospaced))
                         .tracking(compact ? 0.7 : 1.8)

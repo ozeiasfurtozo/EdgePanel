@@ -8,45 +8,68 @@ struct DashboardView: View {
         GeometryReader { geometry in
             let compact = geometry.size.height < 450 || geometry.size.width < 1450
             ZStack {
-                DashboardBackdrop(page: model.currentPage, dark: model.config.darkMode)
                 if let page = model.currentPage {
-                    if page.tiles.count == 1, let tile = page.tiles.first,
-                       [.icue, .pixelClock, .pixelDash].contains(tile.kind),
-                       tile.x == 0, tile.y == 0, tile.width == 16, tile.height == 4 {
-                        BoardView(model: model, page: page, editing: false)
-                    } else {
-                        VStack(spacing: 0) {
-                            header(page: page, compact: compact)
-                                .frame(height: compact ? 48 : 72)
-                            ZStack {
-                                BoardView(model: model, page: page, editing: false)
-                                if page.tiles.isEmpty {
-                                    VStack(spacing: 8) {
-                                        Image(systemName: "square.grid.2x2")
-                                            .font(.system(size: compact ? 30 : 48, weight: .ultraLight))
-                                        Text(L("Esta página está pronta para widgets", "This page is ready for widgets"))
-                                            .font(.system(size: compact ? 15 : 21, weight: .medium, design: .rounded))
-                                    }
-                                    .foregroundStyle(DashboardColors.foreground(page: page, dark: model.config.darkMode).opacity(0.5))
-                                }
-                            }
-                            .padding(.horizontal, compact ? 8 : 16)
-                            .padding(.bottom, compact ? 8 : 16)
-                        }
-                    }
+                    pageSurface(page: page, compact: compact)
+                        .id(page.id)
+                        .transition(pageTransition)
+                } else {
+                    DashboardBackdrop(page: nil, dark: model.config.darkMode, store: model.store)
                 }
                 if model.calibration {
                     CalibrationView(model: model)
                 }
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
+            .clipped()
         }
         .ignoresSafeArea()
         .preferredColorScheme(model.config.darkMode ? .dark : .light)
     }
 
+    private var pageTransition: AnyTransition {
+        let down = model.pageNavigationDirection > 0
+        return .asymmetric(
+            insertion: .offset(y: down ? 72 : -72).combined(with: .opacity),
+            removal: .offset(y: down ? -72 : 72).combined(with: .opacity)
+        )
+    }
+
+    private func pageSurface(page: DashboardPage, compact: Bool) -> some View {
+        ZStack {
+            DashboardBackdrop(page: page, dark: model.config.darkMode, store: model.store)
+            if page.tiles.count == 1, let tile = page.tiles.first,
+               [.icue, .pixelClock, .pixelDash, .actionDeck].contains(tile.kind),
+               tile.x == 0, tile.y == 0, tile.width == 16, tile.height == 4 {
+                BoardView(model: model, page: page, editing: false)
+            } else {
+                VStack(spacing: 0) {
+                    header(page: page, compact: compact)
+                        .frame(height: compact ? 52 : 76)
+                        .padding(.horizontal, compact ? 8 : 16)
+                        .padding(.top, compact ? 4 : 9)
+                        .padding(.bottom, compact ? 4 : 9)
+                    ZStack {
+                        BoardView(model: model, page: page, editing: false)
+                        if page.tiles.isEmpty {
+                            VStack(spacing: 8) {
+                                Image(systemName: "square.grid.2x2")
+                                    .font(.system(size: compact ? 30 : 48, weight: .ultraLight))
+                                Text(L("Esta página está pronta para widgets", "This page is ready for widgets"))
+                                    .font(.system(size: compact ? 15 : 21, weight: .medium, design: .rounded))
+                            }
+                            .foregroundStyle(DashboardColors.foreground(page: page, dark: model.config.darkMode).opacity(0.5))
+                        }
+                    }
+                    .padding(.horizontal, compact ? 8 : 16)
+                    .padding(.bottom, compact ? 8 : 16)
+                }
+            }
+        }
+    }
+
     private func header(page: DashboardPage, compact: Bool) -> some View {
         let ink = DashboardColors.foreground(page: page, dark: model.config.darkMode)
+        let light = DashboardColors.isLight(page: page, dark: model.config.darkMode)
         return HStack(spacing: compact ? 9 : 15) {
             EdgeMark()
                 .frame(width: compact ? 29 : 39, height: compact ? 29 : 39)
@@ -62,6 +85,13 @@ struct DashboardView: View {
                     .foregroundStyle(ink)
             }
             Spacer(minLength: 8)
+            Text(L("\(page.tiles.count) WIDGETS", "\(page.tiles.count) WIDGETS"))
+                .font(.system(size: compact ? 9 : 11, weight: .bold, design: .monospaced))
+                .tracking(0.7)
+                .foregroundStyle(ink.opacity(0.7))
+                .padding(.horizontal, compact ? 7 : 10)
+                .padding(.vertical, compact ? 5 : 7)
+                .background(ink.opacity(0.08), in: Capsule())
             TimelineView(.periodic(from: .now, by: 60)) { timeline in
                 Text(timeline.date, format: .dateTime.weekday(.abbreviated).day().month(.abbreviated).hour().minute())
                     .font(.system(size: compact ? 10 : 13, weight: .medium, design: .monospaced))
@@ -71,19 +101,23 @@ struct DashboardView: View {
             if let profile = model.config.profiles.first(where: { $0.id == model.config.selectedProfileID }),
                let index = profile.pages.firstIndex(where: { $0.id == page.id }), profile.pages.count > 1 {
                 HStack(spacing: compact ? 2 : 5) {
-                    Button { model.selectPage(profile.pages[max(0, index - 1)].id) } label: {
-                        Image(systemName: "chevron.left")
+                    Button { model.navigatePage(by: -1) } label: {
+                        Image(systemName: "chevron.up")
                             .frame(width: compact ? 30 : 36, height: compact ? 30 : 36)
                     }
                     .disabled(index == 0)
+                    .help(L("Página anterior · \(model.globalPageShortcutModifiers) ↑",
+                            "Previous page · \(model.globalPageShortcutModifiers) ↑"))
                     Text(String(format: "%02d / %02d", index + 1, profile.pages.count))
                         .font(.system(size: compact ? 10 : 12, weight: .bold, design: .monospaced))
                         .frame(minWidth: compact ? 43 : 57)
-                    Button { model.selectPage(profile.pages[min(profile.pages.count - 1, index + 1)].id) } label: {
-                        Image(systemName: "chevron.right")
+                    Button { model.navigatePage(by: 1) } label: {
+                        Image(systemName: "chevron.down")
                             .frame(width: compact ? 30 : 36, height: compact ? 30 : 36)
                     }
                     .disabled(index == profile.pages.count - 1)
+                    .help(L("Próxima página · \(model.globalPageShortcutModifiers) ↓",
+                            "Next page · \(model.globalPageShortcutModifiers) ↓"))
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(ink)
@@ -91,7 +125,12 @@ struct DashboardView: View {
                             in: RoundedRectangle(cornerRadius: 11))
             }
         }
-        .padding(.horizontal, compact ? 15 : 26)
+        .padding(.horizontal, compact ? 12 : 20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(light ? Color.white.opacity(0.78) : Color.black.opacity(page.backgroundImage == nil ? 0.31 : 0.57),
+                    in: RoundedRectangle(cornerRadius: compact ? 12 : 17))
+        .overlay(RoundedRectangle(cornerRadius: compact ? 12 : 17)
+            .strokeBorder(light ? Color.black.opacity(0.10) : Color.white.opacity(0.14), lineWidth: 1))
     }
 }
 
@@ -104,6 +143,7 @@ enum DashboardColors {
     }
 
     static func isLight(page: DashboardPage?, dark: Bool) -> Bool {
+        if page?.backgroundImage != nil { return false }
         let hex = page?.backgroundHex ?? backgroundHex(dark: dark)
         guard hex.hasPrefix("#"), hex.count == 7,
               let rgb = UInt32(hex.dropFirst(), radix: 16) else { return !dark }
@@ -118,12 +158,23 @@ enum DashboardColors {
     }
 }
 
-private struct DashboardBackdrop: View {
+struct DashboardBackdrop: View {
     let page: DashboardPage?
     let dark: Bool
+    let store: PanelStore
 
     var body: some View {
-        DashboardColors.background(page: page, dark: dark).ignoresSafeArea()
+        ZStack {
+            DashboardColors.background(page: page, dark: dark)
+            if let filename = page?.backgroundImage,
+               let image = store.backgroundImage(named: filename) {
+                BackgroundImageLayer(image: image,
+                                     scale: page?.backgroundScale ?? "fill",
+                                     horizontal: page?.backgroundHorizontal ?? "center",
+                                     vertical: page?.backgroundVertical ?? "center")
+            }
+        }
+        .ignoresSafeArea()
     }
 }
 
@@ -215,8 +266,8 @@ struct BoardView: View {
                 ForEach(page.tiles) { tile in
                     let shown = model.displayedTile(tile)
                     TileSurface(model: model, metrics: model.metrics, tile: shown, editing: editing)
-                        .frame(width: Double(shown.width) * cellW - (editing || ![.icue, .pixelClock, .pixelDash].contains(shown.kind) ? 8 : 0),
-                               height: Double(shown.height) * cellH - (editing || ![.icue, .pixelClock, .pixelDash].contains(shown.kind) ? 8 : 0))
+                        .frame(width: Double(shown.width) * cellW - (editing || ![.icue, .pixelClock, .pixelDash, .actionDeck].contains(shown.kind) ? 8 : 0),
+                               height: Double(shown.height) * cellH - (editing || ![.icue, .pixelClock, .pixelDash, .actionDeck].contains(shown.kind) ? 8 : 0))
                         .overlay(alignment: .bottomTrailing) {
                             if editing && model.selectedTileID == tile.id {
                                 Image(systemName: "arrow.up.left.and.arrow.down.right")
@@ -263,8 +314,54 @@ struct TileSurface: View {
     let tile: Tile
     let editing: Bool
 
+    private var customBackground: HexColor? {
+        guard [.clock, .cpu, .memory, .network, .timer, .web].contains(tile.kind) else { return nil }
+        return HexColor(hex: tile.settings["nativeBackground"])
+    }
+
+    private var surfaceDark: Bool {
+        customBackground.map { !$0.isLight } ?? model.config.darkMode
+    }
+
+    private var surfaceInk: Color {
+        surfaceDark ? .white : Color(red: 0.08, green: 0.13, blue: 0.19)
+    }
+
     @ViewBuilder var body: some View {
-        if !editing && [.icue, .pixelClock, .pixelDash].contains(tile.kind) {
+        if tile.kind == .actionDeck {
+            ActionDeckTile(model: model, tile: tile, editing: editing)
+                .overlay {
+                    if editing && model.selectedTileID == tile.id {
+                        RoundedRectangle(cornerRadius: 12)
+                            .strokeBorder(model.tilePreviewRejected ? Color.red : Color.cyan, lineWidth: 2)
+                    }
+                }
+                .gesture(editing ? TapGesture().onEnded { model.selectedTileID = tile.id } : nil)
+        } else if tile.kind == .pixelClock {
+            PixelClockTile(settings: PixelClockSettings(tile.settings))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .overlay {
+                    if editing && model.selectedTileID == tile.id {
+                        RoundedRectangle(cornerRadius: 10)
+                            .strokeBorder(model.tilePreviewRejected ? Color.red : Color.cyan, lineWidth: 2)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .gesture(editing ? TapGesture().onEnded { model.selectedTileID = tile.id } : nil)
+        } else if tile.kind == .pixelDash {
+            PixelDashTile(model: model, metrics: model.metrics, tile: tile)
+                .allowsHitTesting(!editing)
+                .overlay {
+                    if editing && model.selectedTileID == tile.id {
+                        RoundedRectangle(cornerRadius: 10)
+                            .strokeBorder(model.tilePreviewRejected ? Color.red : Color.cyan, lineWidth: 2)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .contentShape(Rectangle())
+                .gesture(editing ? TapGesture().onEnded { model.selectedTileID = tile.id } : nil)
+        } else if !editing && tile.kind == .icue {
             content(compact: false).frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if tile.kind == .launcher {
             ApplicationWidget(tile: tile, editing: editing,
@@ -290,18 +387,22 @@ struct TileSurface: View {
             let compact = editing || geometry.size.height < 160 || geometry.size.width < 310
             let inset: CGFloat = editing ? 10 : (compact ? 12 : 19)
             let corner: CGFloat = editing ? 12 : (compact ? 15 : 22)
-            let dark = model.config.darkMode
+            let dark = surfaceDark
 
             styledWidget(compact: compact, dark: dark)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(inset)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background {
-                    RoundedRectangle(cornerRadius: corner)
-                        .fill(LinearGradient(colors: dark ?
-                            [Color(red: 0.075, green: 0.10, blue: 0.15), Color(red: 0.035, green: 0.055, blue: 0.09)] :
-                            [Color.white, Color(red: 0.94, green: 0.97, blue: 0.985)],
-                            startPoint: .topLeading, endPoint: .bottomTrailing))
+                    if let customBackground {
+                        RoundedRectangle(cornerRadius: corner).fill(customBackground.color)
+                    } else {
+                        RoundedRectangle(cornerRadius: corner)
+                            .fill(LinearGradient(colors: dark ?
+                                [Color(red: 0.075, green: 0.10, blue: 0.15), Color(red: 0.035, green: 0.055, blue: 0.09)] :
+                                [Color.white, Color(red: 0.94, green: 0.97, blue: 0.985)],
+                                startPoint: .topLeading, endPoint: .bottomTrailing))
+                    }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: corner))
                 .overlay {
@@ -334,7 +435,7 @@ struct TileSurface: View {
             let compact = editing || geometry.size.height < 160 || geometry.size.width < 310
             let inset: CGFloat = editing ? 10 : (compact ? 12 : 19)
             let corner: CGFloat = editing ? 12 : (compact ? 15 : 22)
-            let dark = model.config.darkMode
+            let dark = surfaceDark
             VStack(alignment: .leading, spacing: compact ? 6 : 11) {
                 HStack(spacing: compact ? 6 : 10) {
                     Image(systemName: symbol)
@@ -354,7 +455,7 @@ struct TileSurface: View {
                 }
                 if editing && (tile.kind == .web || tile.kind == .icue) {
                     Text(tile.kind == .web ? tile.value : (model.imported(tile.importedID)?.name ?? "iCUE"))
-                        .font(.system(size: 11)).lineLimit(2).foregroundStyle(.secondary)
+                        .font(.system(size: 11)).lineLimit(2).foregroundStyle(surfaceInk.opacity(0.65))
                 } else {
                     content(compact: compact)
                         .frame(maxWidth: .infinity, maxHeight: .infinity,
@@ -363,18 +464,24 @@ struct TileSurface: View {
             }
             .padding(inset)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .foregroundStyle(surfaceInk)
             .background {
-                RoundedRectangle(cornerRadius: corner)
-                    .fill(LinearGradient(colors: dark ?
-                        [Color(red: 0.085, green: 0.13, blue: 0.20), Color(red: 0.055, green: 0.085, blue: 0.14)] :
-                        [Color.white, Color(red: 0.965, green: 0.982, blue: 0.99)],
-                        startPoint: .topLeading, endPoint: .bottomTrailing))
+                if let customBackground {
+                    RoundedRectangle(cornerRadius: corner).fill(customBackground.color)
+                } else {
+                    RoundedRectangle(cornerRadius: corner)
+                        .fill(LinearGradient(colors: dark ?
+                            [Color(red: 0.085, green: 0.13, blue: 0.20), Color(red: 0.055, green: 0.085, blue: 0.14)] :
+                            [Color.white, Color(red: 0.965, green: 0.982, blue: 0.99)],
+                            startPoint: .topLeading, endPoint: .bottomTrailing))
+                }
             }
             .overlay(alignment: .topLeading) {
                 RoundedRectangle(cornerRadius: 2)
                     .fill(cardAccent)
                     .frame(width: compact ? 30 : 52, height: 3)
                     .padding(.leading, inset)
+                    .allowsHitTesting(false)
             }
             .overlay {
                 RoundedRectangle(cornerRadius: corner)
@@ -382,6 +489,7 @@ struct TileSurface: View {
                         (model.tilePreviewRejected ? Color.red : Color.cyan) :
                         (dark ? cardAccent.opacity(0.17) : cardAccent.opacity(0.21)),
                         lineWidth: model.selectedTileID == tile.id && editing ? 2 : 1)
+                    .allowsHitTesting(false)
             }
             .shadow(color: Color.black.opacity(dark ? 0.22 : 0.08), radius: editing ? 0 : 13, y: editing ? 0 : 5)
             .contentShape(RoundedRectangle(cornerRadius: corner))
@@ -396,21 +504,15 @@ struct TileSurface: View {
         case .pixelClock:
             PixelClockTile(settings: PixelClockSettings(tile.settings))
         case .pixelDash:
-            if editing {
-                VStack(alignment: .leading, spacing: 8) {
-                    Image(systemName: "square.grid.3x3.fill").foregroundStyle(.yellow)
-                    Text(L("Painel interativo com pixels", "Interactive pixel dashboard"))
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            } else {
-                PixelDashTile(model: model, metrics: model.metrics, tile: tile)
-            }
+            PixelDashTile(model: model, metrics: model.metrics, tile: tile)
+        case .actionDeck:
+            ActionDeckTile(model: model, tile: tile, editing: editing)
         case .timer:
             TimerTile(editing: editing, compact: compact, initialMinutes: max(1, Int(tile.value) ?? 5),
                       accent: cardAccent).id(tile.value)
         case .web:
             if !tile.value.isEmpty { WebTileView(urlString: tile.value).clipShape(RoundedRectangle(cornerRadius: 8)) }
-            else { Text(L("Configure o endereço no editor", "Set the address in the editor")).foregroundStyle(.secondary) }
+            else { Text(L("Configure o endereço no editor", "Set the address in the editor")).foregroundStyle(surfaceInk.opacity(0.65)) }
         case .icue:
             if let imported = model.imported(tile.importedID), imported.compatible {
                 ImportedWidgetView(tile: tile, imported: imported, libraryURL: model.store.libraryURL,
@@ -425,6 +527,7 @@ struct TileSurface: View {
         switch tile.kind {
         case .clock, .pixelClock: fallback = Color(red: 0.31, green: 0.82, blue: 0.96)
         case .pixelDash: fallback = Color(red: 0.99, green: 0.73, blue: 0.34)
+        case .actionDeck: fallback = Color(red: 0.30, green: 0.85, blue: 0.94)
         case .timer: fallback = model.config.darkMode ?
             Color(red: 0.99, green: 0.73, blue: 0.34) : Color(red: 0.66, green: 0.35, blue: 0.04)
         case .cpu: fallback = Color(red: 0.39, green: 0.76, blue: 1)
@@ -442,6 +545,7 @@ struct TileSurface: View {
         case .clock: return "clock"
         case .pixelClock: return "square.grid.3x3.fill"
         case .pixelDash: return "square.grid.3x3.topleft.filled"
+        case .actionDeck: return "square.grid.4x3.fill"
         case .cpu: return "cpu"
         case .memory: return "memorychip"
         case .network: return "network"

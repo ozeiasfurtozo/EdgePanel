@@ -1,27 +1,48 @@
 import SwiftUI
 
+enum PixelClockSize: String, CaseIterable {
+    case s, m, l, xl
+
+    var heightFactor: CGFloat {
+        switch self {
+        case .s: return 0.04
+        case .m: return 0.06
+        case .l: return 0.08
+        case .xl: return 0.10
+        }
+    }
+}
+
 struct PixelClockSettings {
+    let size: PixelClockSize
     let showSeconds: Bool
     let showDate: Bool
     let showWeek: Bool
     let weekProgress: Bool
     let weekStartsMonday: Bool
     let uses24HourTime: Bool
+    let showAMPM: Bool
+    let customStyle: Bool
+    let backgroundTransparency: Double
     let timeZoneID: String
     let foregroundHex: String
     let accentHex: String
     let backgroundHex: String
 
     init(_ values: [String: String]) {
-        showSeconds = values["pixelShowSeconds"] != "false"
+        size = PixelClockSize(rawValue: values["pixelSize"] ?? "xl") ?? .xl
+        showSeconds = values["pixelShowSeconds"] == "true"
         showDate = values["pixelShowDate"] != "false"
         showWeek = values["pixelShowWeek"] != "false"
-        weekProgress = values["pixelWeekProgress"] != "false"
-        weekStartsMonday = values["pixelWeekStartsMonday"] != "false"
+        weekProgress = values["pixelWeekProgress"] == "true"
+        weekStartsMonday = values["pixelWeekStartsMonday"] == "true"
         uses24HourTime = values["pixel24Hour"] != "false"
+        showAMPM = values["pixelShowAMPM"] == "true"
+        customStyle = values["pixelCustomStyle"] != "false"
+        backgroundTransparency = min(100, max(0, Double(values["pixelBackgroundTransparency"] ?? "100") ?? 100))
         timeZoneID = values["pixelTimeZone"] ?? "local"
-        foregroundHex = values["pixelForeground"] ?? "#F4F3EE"
-        accentHex = values["pixelAccent"] ?? "#FF6464"
+        foregroundHex = values["pixelForeground"] ?? "#FFFFFF"
+        accentHex = values["pixelAccent"] ?? "#FF4048"
         backgroundHex = values["pixelBackground"] ?? "#080A0D"
     }
 
@@ -61,6 +82,12 @@ struct PixelClockSettings {
         return formatter.string(from: date).uppercased(with: .current)
     }
 
+    func dayOfMonth(at date: Date) -> Int {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        return calendar.component(.day, from: date)
+    }
+
     static func color(_ hex: String, fallback: Color) -> Color {
         let value = hex.trimmingCharacters(in: .whitespacesAndNewlines)
         guard value.hasPrefix("#"), value.count == 7,
@@ -71,154 +98,181 @@ struct PixelClockSettings {
     }
 }
 
+struct PixelClockLayout {
+    let unit: CGFloat
+    let contentFrame: CGRect
+    let calendarOrigin: CGPoint?
+    let timeOrigin: CGPoint
+    let meridiemOrigin: CGPoint?
+    let weekOrigin: CGPoint?
+
+    init(size: CGSize, settings: PixelClockSettings, time: String, meridiem: String) {
+        let timeColumns = PixelClockGlyphs.columns(for: time)
+        let meridiemColumns = meridiem.isEmpty ? 0 : 5
+        let rightColumns = max(timeColumns + meridiemColumns, settings.showWeek ? 27 : 0)
+        let totalColumns = rightColumns + (settings.showDate ? 11 : 0)
+        let rightRows = settings.showWeek ? 7 : 5
+        let totalRows = max(rightRows, settings.showDate ? 8 : 0)
+        let inset = min(42, max(10, size.height * 0.07))
+        let availableWidth = max(1, size.width - inset * 2)
+        let availableHeight = max(1, size.height - inset * 2)
+        unit = max(1, floor(min(availableWidth / CGFloat(totalColumns),
+                                availableHeight / CGFloat(totalRows),
+                                size.height * settings.size.heightFactor)))
+        contentFrame = CGRect(x: floor((size.width - CGFloat(totalColumns) * unit) / 2),
+                              y: floor((size.height - CGFloat(totalRows) * unit) / 2),
+                              width: CGFloat(totalColumns) * unit,
+                              height: CGFloat(totalRows) * unit)
+        calendarOrigin = settings.showDate ? contentFrame.origin : nil
+        let rightX = contentFrame.minX + (settings.showDate ? 11 * unit : 0)
+        let rightY = contentFrame.minY + CGFloat(totalRows - rightRows) * unit / 2
+        timeOrigin = CGPoint(x: rightX + (CGFloat(rightColumns - timeColumns - meridiemColumns) * unit / 2),
+                             y: rightY)
+        meridiemOrigin = meridiem.isEmpty ? nil : CGPoint(x: timeOrigin.x + CGFloat(timeColumns + 1) * unit,
+                                                          y: timeOrigin.y + 2.7 * unit)
+        weekOrigin = settings.showWeek ? CGPoint(x: rightX + CGFloat(rightColumns - 27) * unit / 2,
+                                                  y: rightY + 6 * unit) : nil
+    }
+}
+
 struct PixelClockTile: View {
     let settings: PixelClockSettings
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { timeline in
-            GeometryReader { geometry in
-                let compact = geometry.size.height < 230
-                let inset = max(12, min(46, geometry.size.height * 0.065))
-                let foreground = PixelClockSettings.color(settings.foregroundHex, fallback: .white)
-                let accent = PixelClockSettings.color(settings.accentHex, fallback: .red)
-                let background = PixelClockSettings.color(settings.backgroundHex, fallback: .black)
-
-                ZStack {
-                    RoundedRectangle(cornerRadius: max(10, min(28, geometry.size.height * 0.055)))
-                        .fill(background)
-                    RoundedRectangle(cornerRadius: max(10, min(28, geometry.size.height * 0.055)))
-                        .strokeBorder(foreground.opacity(0.10), lineWidth: 1)
-
-                    VStack(spacing: max(5, geometry.size.height * 0.018)) {
-                        if !compact {
-                            HStack(spacing: 10) {
-                                PixelMark(color: accent)
-                                    .frame(width: 24, height: 18)
-                                Text(L("RELÓGIO // PIXEL", "PIXEL // CLOCK"))
-                                    .tracking(2.5)
-                                Spacer()
-                                Text(settings.timeZone.abbreviation(for: timeline.date) ?? settings.timeZone.identifier)
-                                    .tracking(1.5)
-                            }
-                            .font(.system(size: max(10, min(15, geometry.size.height * 0.028)), weight: .bold, design: .monospaced))
-                            .foregroundStyle(foreground.opacity(0.55))
-                        }
-
-                        HStack(alignment: .bottom, spacing: max(8, geometry.size.width * 0.008)) {
-                            PixelDigits(text: settings.timeText(at: timeline.date), color: foreground)
-                                .shadow(color: foreground.opacity(0.17), radius: 8)
-                            if !settings.uses24HourTime {
-                                Text(settings.meridiem(at: timeline.date))
-                                    .font(.system(size: max(12, min(34, geometry.size.height * 0.08)), weight: .bold, design: .monospaced))
-                                    .foregroundStyle(foreground)
-                                    .padding(.bottom, max(3, geometry.size.height * 0.03))
-                            }
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                        if settings.showDate && geometry.size.height >= 150 {
-                            Text(settings.dateText(at: timeline.date))
-                                .font(.system(size: max(11, min(23, geometry.size.height * 0.043)), weight: .semibold, design: .monospaced))
-                                .tracking(2)
-                                .foregroundStyle(foreground.opacity(0.83))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.65)
-                        }
-
-                        if settings.showWeek && geometry.size.height >= 130 {
-                            PixelWeekBar(currentDay: settings.weekdayIndex(at: timeline.date),
-                                         fillsPastDays: settings.weekProgress,
-                                         accent: accent, foreground: foreground)
-                                .frame(width: min(geometry.size.width * 0.62, geometry.size.height * 1.15),
-                                       height: max(5, min(13, geometry.size.height * 0.018)))
-                        }
-                    }
-                    .padding(inset)
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(settings.timeText(at: timeline.date)) \(settings.meridiem(at: timeline.date)) \(settings.dateText(at: timeline.date))")
-            }
+            PixelClockFace(settings: settings, date: timeline.date)
         }
     }
 }
 
-private struct PixelMark: View {
-    let color: Color
+struct PixelClockFace: View {
+    let settings: PixelClockSettings
+    let date: Date
 
     var body: some View {
-        GeometryReader { geometry in
-            let side = min(geometry.size.width / 4.5, geometry.size.height / 3.5)
-            ForEach(0..<12, id: \.self) { index in
-                RoundedRectangle(cornerRadius: 0.6)
-                    .fill(color.opacity(index == 3 || index == 8 ? 0.35 : 1))
-                    .frame(width: side, height: side)
-                    .position(x: CGFloat(index % 4) * side * 1.22 + side / 2,
-                              y: CGFloat(index / 4) * side * 1.22 + side / 2)
-            }
-        }
-    }
-}
+        let time = settings.timeText(at: date)
+        let meridiem = settings.showAMPM && !settings.uses24HourTime ? settings.meridiem(at: date) : ""
+        let foreground = PixelClockSettings.color(settings.customStyle ? settings.foregroundHex : "#FFFFFF", fallback: .white)
+        let accent = PixelClockSettings.color(settings.customStyle ? settings.accentHex : "#FF4048", fallback: .red)
+        let background = PixelClockSettings.color(settings.customStyle ? settings.backgroundHex : "#080A0D", fallback: .black)
 
-private struct PixelWeekBar: View {
-    let currentDay: Int
-    let fillsPastDays: Bool
-    let accent: Color
-    let foreground: Color
-
-    var body: some View {
-        HStack(spacing: 6) {
-            ForEach(0..<7, id: \.self) { day in
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(day == currentDay ? accent : (fillsPastDays && day < currentDay ? accent.opacity(0.48) : foreground.opacity(0.20)))
-                    .frame(maxWidth: .infinity)
-            }
-        }
-        .accessibilityHidden(true)
-    }
-}
-
-private struct PixelDigits: View {
-    let text: String
-    let color: Color
-
-    var body: some View {
         Canvas { context, size in
-            let glyphs = text.map { Self.glyphs[$0] ?? Self.glyphs[" "]! }
-            let columnCount = glyphs.reduce(0) { $0 + $1[0].count } + max(0, glyphs.count - 1)
-            guard columnCount > 0, size.width > 0, size.height > 0 else { return }
-            let pitch = min(size.width / CGFloat(columnCount), size.height / 7)
-            let dot = max(1, pitch * 0.78)
-            let left = (size.width - CGFloat(columnCount) * pitch) / 2
-            let top = (size.height - 7 * pitch) / 2
-            var column = 0
-
-            for glyph in glyphs {
-                for (row, pattern) in glyph.enumerated() {
-                    for (index, pixel) in pattern.enumerated() where pixel == "1" {
-                        let rect = CGRect(x: left + CGFloat(column + index) * pitch + (pitch - dot) / 2,
-                                          y: top + CGFloat(row) * pitch + (pitch - dot) / 2,
-                                          width: dot, height: dot)
-                        context.fill(Path(roundedRect: rect, cornerRadius: max(0.5, dot * 0.07)), with: .color(color))
-                    }
-                }
-                column += glyph[0].count + 1
+            let layout = PixelClockLayout(size: size, settings: settings, time: time, meridiem: meridiem)
+            let backgroundOpacity = settings.customStyle ? 1 - settings.backgroundTransparency / 100 : 0
+            if backgroundOpacity > 0 {
+                context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(background.opacity(backgroundOpacity)))
+            }
+            if let origin = layout.calendarOrigin {
+                PixelClockGlyphs.drawCalendar(day: settings.dayOfMonth(at: date),
+                                               at: origin, unit: layout.unit,
+                                               context: context, foreground: foreground, accent: accent)
+            }
+            PixelClockGlyphs.draw(time, at: layout.timeOrigin, unit: layout.unit,
+                                  context: context, color: foreground)
+            if let origin = layout.meridiemOrigin {
+                PixelClockGlyphs.draw(meridiem, at: origin, unit: layout.unit * 0.43,
+                                      context: context, color: foreground)
+            }
+            if let origin = layout.weekOrigin {
+                PixelClockGlyphs.drawWeek(current: settings.weekdayIndex(at: date),
+                                           fillPast: settings.weekProgress, at: origin,
+                                           unit: layout.unit, context: context,
+                                           foreground: foreground, accent: accent)
             }
         }
-        .accessibilityHidden(true)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(time) \(meridiem) \(settings.dateText(at: date))")
+    }
+}
+
+enum PixelClockGlyphs {
+    private static let glyphs: [Character: [String]] = [
+        "0": ["111", "101", "101", "101", "111"],
+        "1": ["010", "110", "010", "010", "111"],
+        "2": ["111", "001", "111", "100", "111"],
+        "3": ["111", "001", "111", "001", "111"],
+        "4": ["101", "101", "111", "001", "001"],
+        "5": ["111", "100", "111", "001", "111"],
+        "6": ["111", "100", "111", "101", "111"],
+        "7": ["111", "001", "001", "001", "001"],
+        "8": ["111", "101", "111", "101", "111"],
+        "9": ["111", "101", "111", "001", "111"],
+        ":": ["0", "1", "0", "1", "0"],
+        "A": ["010", "101", "111", "101", "101"],
+        "M": ["10001", "11011", "10101", "10001", "10001"],
+        "P": ["110", "101", "110", "100", "100"],
+        " ": ["000", "000", "000", "000", "000"]
+    ]
+
+    static func columns(for text: String) -> Int {
+        max(0, text.reduce(0) { $0 + (glyphs[$1] ?? glyphs[" "]!)[0].count + 1 } - 1)
     }
 
-    private static let glyphs: [Character: [String]] = [
-        "0": ["01110", "10001", "10011", "10101", "11001", "10001", "01110"],
-        "1": ["00100", "01100", "00100", "00100", "00100", "00100", "01110"],
-        "2": ["01110", "10001", "00001", "00010", "00100", "01000", "11111"],
-        "3": ["11110", "00001", "00001", "01110", "00001", "00001", "11110"],
-        "4": ["00010", "00110", "01010", "10010", "11111", "00010", "00010"],
-        "5": ["11111", "10000", "10000", "11110", "00001", "00001", "11110"],
-        "6": ["01111", "10000", "10000", "11110", "10001", "10001", "01110"],
-        "7": ["11111", "00001", "00010", "00100", "01000", "01000", "01000"],
-        "8": ["01110", "10001", "10001", "01110", "10001", "10001", "01110"],
-        "9": ["01110", "10001", "10001", "01111", "00001", "00001", "11110"],
-        ":": ["0", "1", "1", "0", "1", "1", "0"],
-        " ": ["000", "000", "000", "000", "000", "000", "000"]
-    ]
+    static func draw(_ text: String, at origin: CGPoint, unit: CGFloat,
+                     context: GraphicsContext, color: Color) {
+        var column = 0
+        for character in text {
+            let glyph = glyphs[character] ?? glyphs[" "]!
+            for (row, pattern) in glyph.enumerated() {
+                for (index, pixel) in pattern.enumerated() where pixel == "1" {
+                    square(column: column + index, row: row, at: origin, unit: unit,
+                           context: context, color: color)
+                }
+            }
+            column += glyph[0].count + 1
+        }
+    }
+
+    static func drawCalendar(day: Int, at origin: CGPoint, unit: CGFloat,
+                             context: GraphicsContext, foreground: Color, accent: Color) {
+        for row in 0..<2 {
+            for column in 0..<9 {
+                square(column: column, row: row, at: origin, unit: unit, context: context, color: accent)
+            }
+        }
+        for row in 2..<8 {
+            for column in 0..<9 where !calendarCutout(day: day, row: row, column: column) {
+                square(column: column, row: row, at: origin, unit: unit, context: context, color: foreground)
+            }
+        }
+    }
+
+    static func calendarCutout(day: Int, row: Int, column: Int) -> Bool {
+        guard (2..<7).contains(row) else { return false }
+        let digits = Array(String(format: "%02d", min(31, max(1, day))))
+        let character: Character
+        let glyphColumn: Int
+        switch column {
+        case 1...3:
+            character = digits[0]
+            glyphColumn = column - 1
+        case 5...7:
+            character = digits[1]
+            glyphColumn = column - 5
+        default:
+            return false
+        }
+        return Array(glyphs[character]![row - 2])[glyphColumn] == "1"
+    }
+
+    static func drawWeek(current: Int, fillPast: Bool, at origin: CGPoint, unit: CGFloat,
+                         context: GraphicsContext, foreground: Color, accent: Color) {
+        for day in 0..<7 {
+            let color = day == current ? foreground :
+                (fillPast && day < current ? accent : foreground.opacity(0.36))
+            for segment in 0..<3 {
+                square(column: day * 4 + segment, row: 0, at: origin,
+                       unit: unit, context: context, color: color)
+            }
+        }
+    }
+
+    private static func square(column: Int, row: Int, at origin: CGPoint, unit: CGFloat,
+                               context: GraphicsContext, color: Color) {
+        let dot = max(1, floor(unit * 0.88))
+        let rect = CGRect(x: floor(origin.x + CGFloat(column) * unit + (unit - dot) / 2),
+                          y: floor(origin.y + CGFloat(row) * unit + (unit - dot) / 2),
+                          width: dot, height: dot)
+        context.fill(Path(rect), with: .color(color))
+    }
 }

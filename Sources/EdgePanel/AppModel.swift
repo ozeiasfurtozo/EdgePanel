@@ -1,6 +1,11 @@
 import AppKit
 import Combine
 import ServiceManagement
+import SwiftUI
+
+enum ActionDeckPreset {
+    case mini, compact, fullPage
+}
 
 @MainActor final class AppModel: ObservableObject {
     let store: PanelStore
@@ -29,10 +34,14 @@ import ServiceManagement
     @Published private(set) var tilePreview: Tile?
     @Published private(set) var tilePreviewRejected = false
     @Published var message = ""
+    @Published var globalPageShortcutModifiers = "Control–Shift"
+    @Published var deckMessage = ""
     @Published var libraryOpenRequest = 0
     @Published var calibration = false
     @Published var calibrationHits: Set<Int> = []
+    private(set) var pageNavigationDirection = 1
     var onDashboardChange: (() -> Void)?
+    var lastExternalApplication: NSRunningApplication?
 
     init(store: PanelStore = PanelStore()) {
         self.store = store
@@ -60,10 +69,28 @@ import ServiceManagement
     }
 
     func selectPage(_ id: UUID) {
-        guard let p = profileIndex, config.profiles[p].pages.contains(where: { $0.id == id }) else { return }
+        guard let p = profileIndex,
+              let destination = config.profiles[p].pages.firstIndex(where: { $0.id == id }),
+              id != config.selectedPageID else { return }
+        pageNavigationDirection = destination < (pageIndex ?? destination) ? -1 : 1
         cancelTilePreview()
-        config.selectedPageID = id
-        selectedTileID = nil
+        withAnimation(.easeInOut(duration: 0.32)) {
+            config.selectedPageID = id
+            selectedTileID = nil
+        }
+    }
+
+    func adjacentPageID(by offset: Int) -> UUID? {
+        guard let p = profileIndex, let q = pageIndex,
+              offset != 0,
+              config.profiles[p].pages.indices.contains(q + offset) else { return nil }
+        return config.profiles[p].pages[q + offset].id
+    }
+
+    @discardableResult func navigatePage(by offset: Int) -> Bool {
+        guard let id = adjacentPageID(by: offset) else { return false }
+        selectPage(id)
+        return true
     }
 
     func addProfile() {
@@ -93,6 +120,19 @@ import ServiceManagement
     func setPageBackground(_ id: UUID, hex: String?) {
         guard let p = profileIndex, let q = config.profiles[p].pages.firstIndex(where: { $0.id == id }) else { return }
         config.profiles[p].pages[q].backgroundHex = hex
+    }
+
+    func setPageBackgroundImage(_ id: UUID, filename: String?) {
+        guard let p = profileIndex, let q = config.profiles[p].pages.firstIndex(where: { $0.id == id }) else { return }
+        config.profiles[p].pages[q].backgroundImage = filename
+    }
+
+    func setPageBackgroundPlacement(_ id: UUID, scale: String? = nil,
+                                    horizontal: String? = nil, vertical: String? = nil) {
+        guard let p = profileIndex, let q = config.profiles[p].pages.firstIndex(where: { $0.id == id }) else { return }
+        if let scale { config.profiles[p].pages[q].backgroundScale = scale }
+        if let horizontal { config.profiles[p].pages[q].backgroundHorizontal = horizontal }
+        if let vertical { config.profiles[p].pages[q].backgroundVertical = vertical }
     }
 
     func removeProfile(_ id: UUID) {
@@ -162,17 +202,24 @@ import ServiceManagement
         return tile
     }
 
-    func addTile(_ kind: WidgetKind, importedID: UUID? = nil) {
+    func addTile(_ kind: WidgetKind, importedID: UUID? = nil,
+                 deckPreset: ActionDeckPreset = .compact) {
         guard let p = profileIndex, let q = pageIndex else { return }
+        let fullDeck = kind == .actionDeck && deckPreset == .fullPage
         let width: Int
         switch kind {
         case .pixelDash: width = 16
+        case .actionDeck: width = fullDeck ? 16 : (deckPreset == .mini ? 2 : 4)
         case .pixelClock: width = 8
         case .web, .icue: width = 6
         case .launcher: width = 2
         default: width = 4
         }
-        var tile = Tile(kind: kind, width: width, height: kind == .pixelDash ? 4 : 2)
+        var tile = Tile(kind: kind, width: width, height: kind == .pixelDash || fullDeck ? 4 : 2)
+        if kind == .actionDeck && !fullDeck {
+            tile.settings["deckVisibleCount"] = deckPreset == .mini ? "4" : "8"
+            tile.settings["deckColumns"] = deckPreset == .mini ? "2" : "4"
+        }
         tile.importedID = importedID
         if let importedID, let imported = imports.first(where: { $0.id == importedID }) { tile.title = imported.name }
         var found = false
@@ -215,7 +262,7 @@ import ServiceManagement
 
     func toggleTouch(_ enabled: Bool) {
         config.touchEnabled = enabled
-        if enabled { touch.start() } else { touch.stop() }
+        if enabled { touch.start(requestPermissions: true) } else { touch.stop() }
     }
 
     func toggleLogin(_ enabled: Bool) {

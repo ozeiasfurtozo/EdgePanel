@@ -1,7 +1,7 @@
 import Foundation
 
 enum WidgetKind: String, Codable, CaseIterable, Identifiable {
-    case clock, pixelClock, pixelDash, cpu, memory, network, launcher, timer, web, icue
+    case clock, pixelClock, pixelDash, cpu, memory, network, launcher, actionDeck, timer, web, icue
     var id: String { rawValue }
 
     var title: String {
@@ -13,6 +13,7 @@ enum WidgetKind: String, Codable, CaseIterable, Identifiable {
         case .memory: return L("Memória", "Memory")
         case .network: return L("Rede", "Network")
         case .launcher: return L("Aplicativo", "Application")
+        case .actionDeck: return L("Deck de Ações", "Action Deck")
         case .timer: return "Timer"
         case .web: return "Web"
         case .icue: return "iCUE"
@@ -52,6 +53,10 @@ struct DashboardPage: Codable, Identifiable, Equatable {
     var name: String
     var tiles: [Tile] = []
     var backgroundHex: String? = nil
+    var backgroundImage: String? = nil
+    var backgroundScale: String? = nil
+    var backgroundHorizontal: String? = nil
+    var backgroundVertical: String? = nil
 }
 
 struct DashboardProfile: Codable, Identifiable, Equatable {

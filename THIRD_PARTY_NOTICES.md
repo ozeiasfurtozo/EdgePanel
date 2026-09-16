@@ -53,3 +53,5 @@ SOFTWARE.
 ```
 
 This app is independent and is not affiliated with or endorsed by CORSAIR or Elgato. Imported widgets are supplied by their respective authors and retain their own licenses.
+
+The in-app updater bundles [Sparkle 2.10.0](https://github.com/sparkle-project/Sparkle/tree/2.10.0). Its MIT license and the notices for its bundled third-party components are included in [`ThirdParty/Sparkle/LICENSE`](ThirdParty/Sparkle/LICENSE) and in the app bundle as `SPARKLE_LICENSE`.

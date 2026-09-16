@@ -233,17 +233,34 @@ struct ImportedWidgetView: NSViewRepresentable {
     }
 }
 
+final class DashboardWebView: WKWebView {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
 struct WebTileView: NSViewRepresentable {
     let urlString: String
-    func makeNSView(context: Context) -> WKWebView {
-        let view = WKWebView()
+
+    final class Coordinator {
+        var configuredURLString: String?
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> DashboardWebView {
+        let view = DashboardWebView()
         view.underPageBackgroundColor = .clear
-        if let url = URL(string: urlString), ["https", "http"].contains(url.scheme?.lowercased() ?? "") { view.load(URLRequest(url: url)) }
+        loadConfiguredURL(in: view, coordinator: context.coordinator)
         return view
     }
-    func updateNSView(_ view: WKWebView, context: Context) {
-        if view.url?.absoluteString != urlString, let url = URL(string: urlString), ["https", "http"].contains(url.scheme?.lowercased() ?? "") {
-            view.load(URLRequest(url: url))
-        }
+
+    func updateNSView(_ view: DashboardWebView, context: Context) {
+        loadConfiguredURL(in: view, coordinator: context.coordinator)
+    }
+
+    private func loadConfiguredURL(in view: DashboardWebView, coordinator: Coordinator) {
+        guard coordinator.configuredURLString != urlString else { return }
+        coordinator.configuredURLString = urlString
+        guard let url = URL(string: urlString), ["https", "http"].contains(url.scheme?.lowercased() ?? "") else { return }
+        view.load(URLRequest(url: url))
     }
 }

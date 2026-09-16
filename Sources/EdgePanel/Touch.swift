@@ -41,10 +41,10 @@ struct TouchTransform {
         self.orientation = orientation
     }
 
-    func start() {
+    func start(requestPermissions: Bool = false) {
         guard manager == nil else { return }
         var access = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)
-        if access == kIOHIDAccessTypeUnknown {
+        if requestPermissions && access == kIOHIDAccessTypeUnknown {
             _ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
             access = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)
         }
@@ -82,7 +82,9 @@ struct TouchTransform {
         enabled = true
         canPostEvents = AXIsProcessTrusted()
         if !canPostEvents {
-            _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
+            if requestPermissions {
+                _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
+            }
             status = L("Permita Acessibilidade; toque bloqueado", "Allow Accessibility; touch blocked")
         } else {
             status = targetDisplay() == nil
@@ -135,6 +137,15 @@ struct TouchTransform {
         guard trusted != canPostEvents else { return }
         canPostEvents = trusted
         displayChanged()
+    }
+
+    func requestPermissions() {
+        if manager == nil {
+            start(requestPermissions: true)
+        } else if !AXIsProcessTrusted() {
+            _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
+            refreshPermissions()
+        }
     }
 
     private func attach(_ device: IOHIDDevice) {
