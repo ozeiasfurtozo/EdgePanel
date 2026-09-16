@@ -4,6 +4,14 @@ EdgePanel is an independent macOS dashboard for the CORSAIR XENEON EDGE 14.5-inc
 
 The project targets Apple Silicon and macOS 14 or later. Development and local testing have taken place on Apple Silicon with macOS 26; macOS 14 and a second Mac still need release validation. EdgePanel is not affiliated with or endorsed by CORSAIR or Elgato.
 
+## Screenshots
+
+![Terminal-style clock on the XENEON EDGE](docs/screenshots/01-terminal-clock.png)
+
+![Pixel Clock on the XENEON EDGE](docs/screenshots/02-pixel-clock.png)
+
+![Status dashboard with native widgets and Action Deck](docs/screenshots/03-status-dashboard.png)
+
 ## Features
 
 - Pages, profiles, independent page colors or images, dark/light themes, and a live editor with highlighted navigation, a responsive 16:4 preview, and a dedicated inspector. Moving or resizing a widget updates the XENEON before the change is saved.
