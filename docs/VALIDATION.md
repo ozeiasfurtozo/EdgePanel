@@ -1,6 +1,6 @@
 # Validation status
 
-This document distinguishes checks completed for the local EdgePanel 0.7.3 build from release checks that remain open. The app targets Apple Silicon and macOS 14+, but the available development Mac runs macOS 26.6.2. A build on that Mac does not establish macOS 14 compatibility.
+This document distinguishes checks completed for the local EdgePanel 0.7.4 build from release checks that remain open. The app targets Apple Silicon and macOS 14+, but the available development Mac runs macOS 26.6.2. A build on that Mac does not establish macOS 14 compatibility.
 
 ## Completed locally
 
@@ -11,6 +11,7 @@ This document distinguishes checks completed for the local EdgePanel 0.7.3 build
 - The selected XENEON answered DDC/CI luminance reads and writes through the bundled helper. A test changed 80 to 70 and restored 80. The final UI sends a write only after **Apply**; its value and target have been inspected in the local app.
 - The editor and dashboard were captured at the XENEON's 2560 × 720 layout. Native clock, performance cards, Pixel Clock, Pixel Dashboard, independent page backgrounds, and a full-width imported timer rendered. A synthetic editor drag updated the panel during movement and persisted after release.
 - Application widgets now default to 2 × 2 cells and render only the app icon and its name, with no widget card or heading. Compilation and automated tests pass; a screenshot of this revised layout has not yet been captured.
+- The app menu now includes Cut, Copy, Paste, and Select All, and the Web URL field has a direct **Paste URL** button. Automated tests compile this change; keyboard and button paste still require an interactive editor check.
 - A local `.icuewidget` package imported successfully. Tests reject unsafe ZIP paths and report unsupported dependencies. This does not establish compatibility with every Marketplace widget.
 
 ## Still requiring physical or release validation

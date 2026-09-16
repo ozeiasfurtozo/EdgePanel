@@ -34,6 +34,8 @@ swift test --disable-sandbox --scratch-path .build
 
 On first launch, select the XENEON in the editor's **Display** section. Add widgets, drag them in the preview, and use the lower-right handle to resize. Select a widget for its controls, or click an empty area of the preview to edit the page name and background. The UI follows the Mac's English or Portuguese language setting; this documentation uses the English labels.
 
+For a Web widget, paste a URL into **Page URL** with ⌘V or use **Paste URL** beside the field. The app includes the standard Edit menu so cut, copy, paste, and select all work in editor text fields.
+
 ## Touch setup
 
 The display needs both a video connection and its USB touch connection. Select the XENEON explicitly and turn on **Enable touch**. macOS must grant EdgePanel **Input Monitoring** to capture the touch controller and **Accessibility** to post the redirected click and drag events. These permissions are managed in **System Settings → Privacy & Security**.

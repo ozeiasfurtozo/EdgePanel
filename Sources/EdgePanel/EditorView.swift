@@ -237,8 +237,15 @@ struct EditorView: View {
                         Spacer()
                     }
                     if tile.kind == .web {
-                        TextField("https://", text: tileBinding(tile.id, get: { $0.value }, set: { $0.value = $1 }))
-                            .textFieldStyle(.roundedBorder)
+                        HStack {
+                            TextField(L("URL da página", "Page URL"), text: tileBinding(tile.id, get: { $0.value }, set: { $0.value = $1 }),
+                                      prompt: Text("https://example.com"))
+                                .textFieldStyle(.roundedBorder)
+                            Button(L("Colar URL", "Paste URL")) {
+                                guard let pasted = NSPasteboard.general.string(forType: .string) else { return }
+                                model.updateTile(tile.id) { $0.value = pasted.trimmingCharacters(in: .whitespacesAndNewlines) }
+                            }
+                        }
                     }
                     if tile.kind == .launcher {
                         HStack {

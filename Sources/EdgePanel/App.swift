@@ -95,6 +95,16 @@ import SwiftUI
         let appItem = NSMenuItem(title: "EdgePanel", action: nil, keyEquivalent: "")
         appItem.submenu = actionsMenu(includeQuit: true)
         mainMenu.addItem(appItem)
+
+        let editItem = NSMenuItem(title: L("Editar", "Edit"), action: nil, keyEquivalent: "")
+        let editMenu = NSMenu(title: editItem.title)
+        editMenu.addItem(withTitle: L("Cortar", "Cut"), action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: L("Copiar", "Copy"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: L("Colar", "Paste"), action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: L("Selecionar tudo", "Select All"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editItem.submenu = editMenu
+        mainMenu.addItem(editItem)
         NSApp.mainMenu = mainMenu
     }
 
