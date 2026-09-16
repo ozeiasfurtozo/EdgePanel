@@ -70,7 +70,9 @@ struct TouchTransform {
         let result = IOHIDManagerOpen(hid, IOOptionBits(kIOHIDOptionsTypeSeizeDevice))
         guard result == kIOReturnSuccess else {
             IOHIDManagerUnscheduleFromRunLoop(hid, CFRunLoopGetMain(), CFRunLoopMode.defaultMode.rawValue)
-            inputMonitoringGranted = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
+            // The open result is authoritative when TCC's preflight result is stale.
+            inputMonitoringGranted = result != kIOReturnNotPermitted
+                && IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
             status = result == kIOReturnNotPermitted
                 ? L("Permita Monitoramento de Entrada nas definições do macOS", "Allow Input Monitoring in macOS Settings")
                 : L("Controlador de toque indisponível ou em uso (\(result))", "Touch controller unavailable or in use (\(result))")
