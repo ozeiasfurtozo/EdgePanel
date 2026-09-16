@@ -1,5 +1,10 @@
 # EdgePanel
 
+![macOS 14+](https://img.shields.io/badge/macOS-14%2B-222222?style=flat-square&logo=apple&logoColor=white)
+![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-%E2%9C%93-007EC6?style=flat-square)
+![Swift 5.9](https://img.shields.io/badge/Swift-5.9-F05138?style=flat-square&logo=swift&logoColor=white)
+[![MIT license](https://img.shields.io/badge/license-MIT-4C9F38?style=flat-square)](LICENSE)
+
 EdgePanel is an independent macOS dashboard for the CORSAIR XENEON EDGE 14.5-inch display. It places a borderless, customizable panel on the XENEON and keeps the editor on your main display. It is built with SwiftUI and AppKit, works locally without an account, and stores settings in `~/Library/Application Support/EdgePanel`.
 
 The project targets Apple Silicon and macOS 14 or later. Development and local testing have taken place on Apple Silicon with macOS 26; macOS 14 and a second Mac still need release validation. EdgePanel is not affiliated with or endorsed by CORSAIR or Elgato.
