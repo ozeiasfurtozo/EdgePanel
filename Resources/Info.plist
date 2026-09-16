@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleExecutable</key><string>EdgePanel</string>
+  <key>CFBundleIdentifier</key><string>dev.edgepanel.mac</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleName</key><string>EdgePanel</string>
+  <key>CFBundleDisplayName</key><string>EdgePanel</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>0.7.2</string>
+  <key>CFBundleVersion</key><string>21</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
+  <key>LSMinimumSystemVersion</key><string>14.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>CFBundleDocumentTypes</key>
+  <array><dict>
+    <key>CFBundleTypeName</key><string>iCUE Widget</string>
+    <key>CFBundleTypeRole</key><string>Viewer</string>
+    <key>LSHandlerRank</key><string>Default</string>
+    <key>LSItemContentTypes</key><array><string>com.corsair.icuewidget</string></array>
+    <key>CFBundleTypeExtensions</key><array><string>icuewidget</string></array>
+  </dict></array>
+  <key>UTImportedTypeDeclarations</key>
+  <array><dict>
+    <key>UTTypeIdentifier</key><string>com.corsair.icuewidget</string>
+    <key>UTTypeDescription</key><string>iCUE Widget</string>
+    <key>UTTypeConformsTo</key><array><string>public.zip-archive</string></array>
+    <key>UTTypeTagSpecification</key>
+    <dict><key>public.filename-extension</key><array><string>icuewidget</string></array></dict>
+  </dict></array>
+  <key>NSHumanReadableCopyright</key><string>Copyright © 2026 EdgePanel contributors. Independent application; not affiliated with CORSAIR.</string>
+</dict></plist>

@@ -1,0 +1,11 @@
+.build/
+.swiftpm/
+dist/
+DerivedData/
+.DS_Store
+.env
+.env.*
+*.p12
+*.p8
+*.mobileprovision
+*.dmg
