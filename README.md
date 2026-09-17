@@ -11,7 +11,7 @@ The project targets Apple Silicon and macOS 14 or later. Development and local t
 
 ## Screenshots
 
-![Terminal-style clock on the XENEON EDGE](docs/screenshots/01-terminal-clock.png)
+![EdgePanel dashboard with system widgets and Action Deck on the XENEON EDGE](docs/screenshots/01-dashboard.png)
 
 ![Pixel Clock on the XENEON EDGE](docs/screenshots/02-pixel-clock.png)
 
