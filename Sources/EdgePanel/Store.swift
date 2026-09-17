@@ -19,8 +19,9 @@ final class PanelStore {
 
     func load() -> DashboardConfig {
         guard let data = try? Data(contentsOf: configURL),
-              let value = try? JSONDecoder().decode(DashboardConfig.self, from: data), value.version == 1,
+              var value = try? JSONDecoder().decode(DashboardConfig.self, from: data), value.version == 1,
               !value.profiles.isEmpty else { return .initial() }
+        if value.ensureDesktopPage() { save(value) }
         return value
     }
 

@@ -107,7 +107,7 @@ private actor DDCCommandQueue {
             return
         }
         available = false
-        status = L("Lendo brilho da XENEON…", "Reading XENEON brightness…")
+        status = ""
         Task {
             do {
                 let current = try await commands.read(display)

@@ -5,21 +5,34 @@ import SwiftUI
 @testable import EdgePanel
 
 final class EdgePanelTests: XCTestCase {
+    @MainActor func testSSDWidgetUsesRealVolumeCapacityAndPersists() throws {
+        let snapshot = try XCTUnwrap(StorageSnapshot.read(at: URL(fileURLWithPath: NSHomeDirectory())))
+        XCTAssertGreaterThan(snapshot.totalBytes, 0)
+        XCTAssertGreaterThanOrEqual(snapshot.availableBytes, 0)
+        XCTAssertLessThanOrEqual(snapshot.availableBytes, snapshot.totalBytes)
+        XCTAssertEqual(snapshot.usedBytes + snapshot.availableBytes, snapshot.totalBytes)
+        XCTAssertEqual(snapshot.usedPercent,
+                       100 * Double(snapshot.usedBytes) / Double(snapshot.totalBytes), accuracy: 0.001)
+        XCTAssertNil(StorageSnapshot(volumeName: "Invalid", totalBytes: 0, availableBytes: 0))
+        XCTAssertNil(StorageSnapshot(volumeName: "Invalid", totalBytes: 100, availableBytes: 101))
+
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PanelStore(root: directory)
+        let model = AppModel(store: store)
+        model.addTile(.ssd)
+        let tile = try XCTUnwrap(model.selectedTile)
+        XCTAssertEqual(tile.width, 4)
+        XCTAssertEqual(tile.height, 2)
+        XCTAssertEqual(store.load().profiles.flatMap(\.pages).flatMap(\.tiles)
+            .first(where: { $0.id == tile.id })?.kind, .ssd)
+    }
+
     @MainActor func testBorderlessDashboardCanReceiveKeyboardFocus() {
         let window = DashboardWindow(contentRect: CGRect(x: 0, y: 0, width: 640, height: 180),
                                      styleMask: [.borderless], backing: .buffered, defer: false)
         XCTAssertTrue(window.canBecomeKey)
         XCTAssertTrue(DashboardWebView().acceptsFirstMouse(for: nil))
-    }
-
-    @MainActor func testGlobalPageShortcutDetectsSystemArrowConflict() {
-        let controlShiftUp: [String: Any] = ["enabled": 1,
-                                             "value": ["parameters": [65535, 126, 393216]]]
-        XCTAssertTrue(PageHotkeys.systemReservesPrimaryShortcut(in: ["34": controlShiftUp]))
-        XCTAssertFalse(PageHotkeys.systemReservesPrimaryShortcut(in: ["34": ["enabled": 0,
-                                                                     "value": ["parameters": [65535, 126, 393216]]]]))
-        XCTAssertFalse(PageHotkeys.systemReservesPrimaryShortcut(in: ["34": ["enabled": 1,
-                                                                     "value": ["parameters": [65535, 126, 262144]]]]))
     }
 
     func testBackgroundImageSizingAndAlignment() throws {
@@ -42,13 +55,13 @@ final class EdgePanelTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = PanelStore(root: directory)
         var config = DashboardConfig.initial()
-        config.profiles[0].pages[0].backgroundImage = "00000000-0000-0000-0000-000000000000.png"
-        config.profiles[0].pages[0].backgroundScale = "fit"
-        config.profiles[0].pages[0].backgroundHorizontal = "right"
-        config.profiles[0].pages[0].backgroundVertical = "bottom"
+        config.profiles[0].pages[1].backgroundImage = "00000000-0000-0000-0000-000000000000.png"
+        config.profiles[0].pages[1].backgroundScale = "fit"
+        config.profiles[0].pages[1].backgroundHorizontal = "right"
+        config.profiles[0].pages[1].backgroundVertical = "bottom"
         store.save(config)
-        let restored = store.load().profiles[0].pages[0]
-        XCTAssertEqual(restored.backgroundImage, config.profiles[0].pages[0].backgroundImage)
+        let restored = store.load().profiles[0].pages[1]
+        XCTAssertEqual(restored.backgroundImage, config.profiles[0].pages[1].backgroundImage)
         XCTAssertEqual(restored.backgroundScale, "fit")
         XCTAssertEqual(restored.backgroundHorizontal, "right")
         XCTAssertEqual(restored.backgroundVertical, "bottom")
@@ -148,25 +161,29 @@ final class EdgePanelTests: XCTestCase {
         XCTAssertNil(decoded.first?.colorHex)
     }
 
-    @MainActor func testPageNavigationFollowsCurrentProfileAndStopsAtEnds() throws {
+    @MainActor func testPageNavigationLoopsWithinCurrentProfile() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = PanelStore(root: directory)
         let model = AppModel(store: store)
+        let desktop = try XCTUnwrap(model.config.profiles[0].pages.first?.id)
         let first = try XCTUnwrap(model.currentPage?.id)
         model.addPage()
         let second = try XCTUnwrap(model.currentPage?.id)
         model.addPage()
         let third = try XCTUnwrap(model.currentPage?.id)
 
-        XCTAssertNil(model.adjacentPageID(by: 1))
-        XCTAssertFalse(model.navigatePage(by: 1))
+        XCTAssertEqual(model.adjacentPageID(by: 1), desktop)
+        XCTAssertTrue(model.navigatePage(by: 1))
+        XCTAssertEqual(model.currentPage?.id, desktop)
+        XCTAssertEqual(model.pageNavigationDirection, 1)
         XCTAssertTrue(model.navigatePage(by: -1))
-        XCTAssertEqual(model.currentPage?.id, second)
+        XCTAssertEqual(model.currentPage?.id, third)
         XCTAssertEqual(model.pageNavigationDirection, -1)
         XCTAssertTrue(model.navigatePage(by: -1))
+        XCTAssertEqual(model.currentPage?.id, second)
+        XCTAssertTrue(model.navigatePage(by: -1))
         XCTAssertEqual(model.currentPage?.id, first)
-        XCTAssertFalse(model.navigatePage(by: -1))
         XCTAssertEqual(model.adjacentPageID(by: 1), second)
         XCTAssertTrue(model.navigatePage(by: 2))
         XCTAssertEqual(model.currentPage?.id, third)
@@ -174,8 +191,77 @@ final class EdgePanelTests: XCTestCase {
         XCTAssertEqual(store.load().selectedPageID, third)
 
         model.addProfile()
-        XCTAssertNil(model.adjacentPageID(by: 1))
-        XCTAssertFalse(model.navigatePage(by: -1))
+        XCTAssertEqual(model.currentPage?.name, L("Página 1", "Page 1"))
+        XCTAssertTrue(model.navigatePage(by: -1))
+        XCTAssertEqual(model.currentPage?.desktopMode, true)
+        XCTAssertNotEqual(model.currentPage?.id, desktop)
+    }
+
+    @MainActor func testDesktopPageIsFixedAtZeroAndCannotContainWidgets() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PanelStore(root: directory)
+        let model = AppModel(store: store)
+        let widgetPageID = try XCTUnwrap(model.currentPage?.id)
+        XCTAssertNil(model.currentPage?.desktopMode)
+        let desktopPageID = try XCTUnwrap(model.config.profiles[0].pages.first?.id)
+        model.selectPage(desktopPageID)
+        XCTAssertEqual(model.currentPage?.desktopMode, true)
+        XCTAssertTrue(model.currentPage?.tiles.isEmpty == true)
+        model.addTile(.clock)
+        XCTAssertTrue(model.currentPage?.tiles.isEmpty == true)
+        model.removePage(desktopPageID)
+        model.movePage(desktopPageID, by: 1)
+        model.movePage(widgetPageID, by: -1)
+        XCTAssertEqual(model.config.profiles[0].pages.count, 2)
+        XCTAssertEqual(model.config.profiles[0].pages[0].id, desktopPageID)
+        XCTAssertEqual(store.load().profiles[0].pages[0].desktopMode, true)
+
+        XCTAssertTrue(model.navigatePage(by: -1))
+        XCTAssertEqual(model.currentPage?.id, widgetPageID)
+        XCTAssertTrue(model.navigatePage(by: 1))
+        XCTAssertEqual(model.currentPage?.id, desktopPageID)
+        let restored = AppModel(store: store)
+        XCTAssertEqual(restored.currentPage?.desktopMode, true)
+        XCTAssertTrue(restored.navigatePage(by: -1))
+        XCTAssertEqual(restored.currentPage?.id, widgetPageID)
+        XCTAssertTrue(restored.navigatePage(by: -1))
+        XCTAssertEqual(restored.currentPage?.id, desktopPageID)
+        XCTAssertEqual(restored.pageNavigationDirection, -1)
+        XCTAssertTrue(restored.navigatePage(by: 1))
+        XCTAssertEqual(restored.currentPage?.id, widgetPageID)
+        XCTAssertEqual(restored.pageNavigationDirection, 1)
+
+        model.removePage(widgetPageID)
+        XCTAssertEqual(model.config.profiles[0].pages.map(\.id), [desktopPageID])
+        XCTAssertEqual(model.currentPage?.desktopMode, true)
+        model.addPage()
+        XCTAssertEqual(model.currentPage?.name, L("Página 1", "Page 1"))
+        XCTAssertEqual(model.config.profiles[0].pages[0].id, desktopPageID)
+    }
+
+    @MainActor func testExistingProfilesGainOrMoveDesktopPageWithoutChangingSelection() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = PanelStore(root: directory)
+        var legacy = DashboardConfig.initial()
+        let desktop = legacy.profiles[0].pages.removeFirst()
+        let selectedWidgetID = legacy.selectedPageID
+        legacy.profiles[0].pages.append(desktop)
+        let otherPage = DashboardPage(name: "Other widget page")
+        legacy.profiles.append(DashboardProfile(name: "Other profile", pages: [otherPage]))
+        store.save(legacy)
+
+        let model = AppModel(store: store)
+        XCTAssertEqual(model.currentPage?.id, selectedWidgetID)
+        XCTAssertEqual(model.config.profiles[0].pages[0].id, desktop.id)
+        XCTAssertEqual(model.config.profiles[0].pages[1].id, selectedWidgetID)
+        XCTAssertEqual(model.config.profiles[1].pages[0].desktopMode, true)
+        XCTAssertEqual(model.config.profiles[1].pages[1].id, otherPage.id)
+        let persisted = try JSONDecoder().decode(DashboardConfig.self, from: Data(contentsOf: store.configURL))
+        XCTAssertEqual(persisted.profiles[0].pages[0].id, desktop.id)
+        XCTAssertEqual(persisted.profiles[1].pages[0].desktopMode, true)
+        XCTAssertEqual(persisted.selectedPageID, selectedWidgetID)
     }
 
     func testBrightnessTargetsOnlyTheSelectedDisplayAndParsesDDCValues() throws {
@@ -197,14 +283,14 @@ final class EdgePanelTests: XCTestCase {
         model.previewTile(tile.id) { $0.y = 2 }
         XCTAssertEqual(model.displayedTile(tile).y, 2)
         XCTAssertEqual(model.currentPage?.tiles.first(where: { $0.id == tile.id })?.y, 0)
-        XCTAssertEqual(store.load().profiles[0].pages[0].tiles.first(where: { $0.id == tile.id })?.y, 0)
+        XCTAssertEqual(store.load().profiles[0].pages[1].tiles.first(where: { $0.id == tile.id })?.y, 0)
 
         model.commitTilePreview(tile.id)
-        XCTAssertEqual(store.load().profiles[0].pages[0].tiles.first(where: { $0.id == tile.id })?.y, 2)
+        XCTAssertEqual(store.load().profiles[0].pages[1].tiles.first(where: { $0.id == tile.id })?.y, 2)
         model.previewTile(tile.id) { $0.x = 7; $0.y = 0 }
         XCTAssertTrue(model.tilePreviewRejected)
         model.commitTilePreview(tile.id)
-        XCTAssertEqual(store.load().profiles[0].pages[0].tiles.first(where: { $0.id == tile.id })?.y, 2)
+        XCTAssertEqual(store.load().profiles[0].pages[1].tiles.first(where: { $0.id == tile.id })?.y, 2)
 
         let originalPageID = try XCTUnwrap(model.currentPage?.id)
         model.addPage()
@@ -241,9 +327,9 @@ final class EdgePanelTests: XCTestCase {
         var tile = Tile(kind: .pixelDash, width: 16, height: 4)
         tile.settings = running.merging(["dashWaterDay": PixelDashSettings.dayKey(now),
                                          "dashWaterCount": "4", "dashWaterGoal": "6"]) { _, new in new }
-        config.profiles[0].pages[0].tiles = [tile]
+        config.profiles[0].pages[1].tiles = [tile]
         store.save(config)
-        let loaded = try XCTUnwrap(store.load().profiles[0].pages[0].tiles.first)
+        let loaded = try XCTUnwrap(store.load().profiles[0].pages[1].tiles.first)
         XCTAssertEqual(PixelDashSettings(loaded.settings).waterCount(in: loaded.settings, at: now), 4)
         XCTAssertEqual(PixelDashSettings(loaded.settings).timerRemaining(in: loaded.settings, at: now), 45)
     }
@@ -288,7 +374,7 @@ final class EdgePanelTests: XCTestCase {
         var config = DashboardConfig.initial()
         var tile = Tile(kind: .pixelDash, width: 16, height: 4)
         tile.settings = variants[0].1
-        config.profiles[0].pages[0].tiles = [tile]
+        config.profiles[0].pages[1].tiles = [tile]
         store.save(config)
         let model = AppModel(store: store)
         let dashboard = ImageRenderer(content:
@@ -431,13 +517,13 @@ final class EdgePanelTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = PanelStore(root: directory)
         var config = DashboardConfig.initial()
-        config.profiles[0].pages[0].tiles[0].settings = ["clockFormat": "12", "nativeAccent": "#AA66CC",
+        config.profiles[0].pages[1].tiles[0].settings = ["clockFormat": "12", "nativeAccent": "#AA66CC",
                                                         "clockTimeZone": "Asia/Tokyo", "nativeBackground": "#F4C842"]
         store.save(config)
-        XCTAssertEqual(store.load().profiles[0].pages[0].tiles[0].settings["nativeAccent"], "#AA66CC")
-        XCTAssertEqual(store.load().profiles[0].pages[0].tiles[0].settings["clockTimeZone"], "Asia/Tokyo")
-        XCTAssertEqual(store.load().profiles[0].pages[0].tiles[0].settings["nativeBackground"], "#F4C842")
-        XCTAssertNil(store.load().profiles[0].pages[0].tiles[1].settings["nativeBackground"])
+        XCTAssertEqual(store.load().profiles[0].pages[1].tiles[0].settings["nativeAccent"], "#AA66CC")
+        XCTAssertEqual(store.load().profiles[0].pages[1].tiles[0].settings["clockTimeZone"], "Asia/Tokyo")
+        XCTAssertEqual(store.load().profiles[0].pages[1].tiles[0].settings["nativeBackground"], "#F4C842")
+        XCTAssertNil(store.load().profiles[0].pages[1].tiles[1].settings["nativeBackground"])
     }
 
     func testTouchMappingClampsToSelectedDisplay() {
@@ -454,15 +540,15 @@ final class EdgePanelTests: XCTestCase {
         let store = PanelStore(root: directory)
         var config = DashboardConfig.initial()
         config.selectedDisplay = DisplayIdentity(vendor: 0x0E58, model: 23, serial: 42)
-        config.profiles[0].pages[0].tiles[0].title = "Meu relógio"
-        config.profiles[0].pages[0].backgroundHex = "#29435A"
+        config.profiles[0].pages[1].tiles[0].title = "Meu relógio"
+        config.profiles[0].pages[1].backgroundHex = "#29435A"
         config.profiles[0].pages.append(DashboardPage(name: "Outra página", backgroundHex: "#EAEAEA"))
         store.save(config)
         let loaded = store.load()
         XCTAssertEqual(loaded.selectedDisplay, config.selectedDisplay)
-        XCTAssertEqual(loaded.profiles[0].pages[0].tiles[0].title, "Meu relógio")
-        XCTAssertEqual(loaded.profiles[0].pages[0].backgroundHex, "#29435A")
-        XCTAssertEqual(loaded.profiles[0].pages[1].backgroundHex, "#EAEAEA")
+        XCTAssertEqual(loaded.profiles[0].pages[1].tiles[0].title, "Meu relógio")
+        XCTAssertEqual(loaded.profiles[0].pages[1].backgroundHex, "#29435A")
+        XCTAssertEqual(loaded.profiles[0].pages[2].backgroundHex, "#EAEAEA")
     }
 
     func testZIPRejectsUnsafePathsAndDuplicateNames() throws {

@@ -34,8 +34,12 @@ struct EditorView: View {
                         }
                         .frame(height: previewHeight)
                         .clipped()
-                        Label(L("Arraste widgets para editar · ⌃⇧↑/↓ troca de página",
-                                "Drag widgets to edit · ⌃⇧↑/↓ switches pages"), systemImage: "hand.draw")
+                        Label(page.desktopMode == true
+                              ? L("Área de Trabalho do macOS · ⌃⌥↑/↓ troca de página",
+                                  "macOS desktop · ⌃⌥↑/↓ switches pages")
+                              : L("Arraste widgets para editar · ⌃⌥↑/↓ troca de página",
+                                  "Drag widgets to edit · ⌃⌥↑/↓ switches pages"),
+                              systemImage: page.desktopMode == true ? "desktopcomputer" : "hand.draw")
                             .font(.caption)
                             .foregroundStyle(palette.muted)
                     } else {
@@ -95,7 +99,7 @@ struct EditorView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(palette.accent)
-            .disabled(model.currentPage == nil)
+            .disabled(model.currentPage == nil || model.currentPage?.desktopMode == true)
         }
         .frame(height: 46)
     }
@@ -131,7 +135,9 @@ struct EditorView: View {
                 Text(page.name)
                     .font(.system(size: 21, weight: .semibold, design: .rounded))
                     .lineLimit(1)
-                Text(L("\(page.tiles.count) widgets nesta página", "\(page.tiles.count) widgets on this page"))
+                Text(page.desktopMode == true
+                     ? L("Área de Trabalho e barra de menus do macOS", "macOS desktop and menu bar")
+                     : L("\(page.tiles.count) widgets nesta página", "\(page.tiles.count) widgets on this page"))
                     .font(.caption)
                     .foregroundStyle(palette.muted)
             }
@@ -140,15 +146,13 @@ struct EditorView: View {
                model.config.profiles[p].pages.count > 1 {
                 HStack(spacing: 5) {
                     Button { model.navigatePage(by: -1) } label: { Image(systemName: "chevron.up") }
-                        .disabled(q == 0)
-                        .help(L("Página anterior · Control Shift ↑", "Previous page · Control Shift ↑"))
-                    Text("\(q + 1) / \(model.config.profiles[p].pages.count)")
+                        .help(L("Página anterior · Control Option ↑", "Previous page · Control Option ↑"))
+                    Text("\(q) / \(model.config.profiles[p].pages.count - 1)")
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(palette.muted)
                         .frame(minWidth: 40)
                     Button { model.navigatePage(by: 1) } label: { Image(systemName: "chevron.down") }
-                        .disabled(q == model.config.profiles[p].pages.count - 1)
-                        .help(L("Próxima página · Control Shift ↓", "Next page · Control Shift ↓"))
+                        .help(L("Próxima página · Control Option ↓", "Next page · Control Option ↓"))
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -263,17 +267,20 @@ struct EditorView: View {
                                 let selected = model.config.selectedPageID == page.id
                                 HStack(spacing: 5) {
                                     Button { model.selectPage(page.id) } label: {
-                                        Label(page.name, systemImage: selected ? "rectangle.fill" : "rectangle")
+                                        Label(page.name, systemImage: page.desktopMode == true
+                                              ? "desktopcomputer" : (selected ? "rectangle.fill" : "rectangle"))
                                             .lineLimit(1)
                                             .frame(maxWidth: .infinity, alignment: .leading)
                                     }
                                         .buttonStyle(.plain)
                                         .fontWeight(selected ? .semibold : .regular)
-                                    Button { model.movePage(page.id, by: -1) } label: { Image(systemName: "arrow.up") }
-                                        .buttonStyle(.plain).disabled(model.config.profiles[p].pages.first?.id == page.id)
-                                    Button { model.movePage(page.id, by: 1) } label: { Image(systemName: "arrow.down") }
-                                        .buttonStyle(.plain).disabled(model.config.profiles[p].pages.last?.id == page.id)
-                                    if model.config.profiles[p].pages.count > 1 {
+                                    if page.desktopMode != true {
+                                        Button { model.movePage(page.id, by: -1) } label: { Image(systemName: "arrow.up") }
+                                            .buttonStyle(.plain)
+                                            .disabled(model.config.profiles[p].pages.dropFirst().first?.id == page.id)
+                                        Button { model.movePage(page.id, by: 1) } label: { Image(systemName: "arrow.down") }
+                                            .buttonStyle(.plain)
+                                            .disabled(model.config.profiles[p].pages.last?.id == page.id)
                                         Button { model.removePage(page.id) } label: { Image(systemName: "minus.circle") }
                                             .buttonStyle(.plain).help(L("Apagar página", "Delete page"))
                                     }
@@ -418,7 +425,7 @@ struct EditorView: View {
                             Text(L("Duração: \(max(1, Int(tile.value) ?? 5)) minutos", "Duration: \(max(1, Int(tile.value) ?? 5)) minutes"))
                         }
                     }
-                    if [.clock, .cpu, .memory, .network, .launcher, .timer, .web].contains(tile.kind) {
+                    if [.clock, .cpu, .memory, .network, .ssd, .launcher, .timer].contains(tile.kind) {
                         nativeWidgetControls(tile)
                     }
                     if tile.kind == .pixelClock {
@@ -450,8 +457,11 @@ struct EditorView: View {
             VStack(alignment: .leading, spacing: 14) {
                 Label(L("Configurações da página", "Page settings"), systemImage: "rectangle.stack")
                     .font(.headline)
-                Text(L("Selecione um widget para editar seus detalhes. Clique em uma área vazia da prévia para voltar à página.",
-                       "Select a widget to edit its details. Click an empty area of the preview to return to the page."))
+                Text(page.desktopMode == true
+                     ? L("Nesta página, o EdgePanel libera a XENEON para mostrar a Área de Trabalho e a barra de menus do macOS.",
+                         "On this page, EdgePanel reveals the macOS desktop and menu bar on the XENEON.")
+                     : L("Selecione um widget para editar seus detalhes. Clique em uma área vazia da prévia para voltar à página.",
+                         "Select a widget to edit its details. Click an empty area of the preview to return to the page."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -461,41 +471,49 @@ struct EditorView: View {
                 ))
                 .textFieldStyle(.roundedBorder)
 
-                Divider()
-                Text(L("Aparência", "Appearance"))
-                    .font(.subheadline.weight(.semibold))
-                ColorPicker(L("Fundo desta página", "This page background"), selection: Binding(
-                    get: {
-                        Color(hex: model.currentPage?.backgroundHex ??
-                              DashboardColors.backgroundHex(dark: model.config.darkMode))
-                    },
-                    set: { model.setPageBackground(page.id, hex: $0.hexString) }
-                ), supportsOpacity: false)
-                HStack {
-                    Text(model.currentPage?.backgroundHex ??
-                         DashboardColors.backgroundHex(dark: model.config.darkMode))
-                        .font(.caption.monospaced())
+                if page.desktopMode == true {
+                    Label(L("Use ⌃⌥↑/↓ ou o menu do EdgePanel para voltar aos widgets.",
+                            "Use ⌃⌥↑/↓ or the EdgePanel menu to return to widgets."),
+                          systemImage: "keyboard")
+                        .font(.caption)
                         .foregroundStyle(.secondary)
-                    Spacer()
-                    Button(L("Usar fundo padrão", "Use default background")) {
-                        model.setPageBackground(page.id, hex: nil)
+                } else {
+                    Divider()
+                    Text(L("Aparência", "Appearance"))
+                        .font(.subheadline.weight(.semibold))
+                    ColorPicker(L("Fundo desta página", "This page background"), selection: Binding(
+                        get: {
+                            Color(hex: model.currentPage?.backgroundHex ??
+                                  DashboardColors.backgroundHex(dark: model.config.darkMode))
+                        },
+                        set: { model.setPageBackground(page.id, hex: $0.hexString) }
+                    ), supportsOpacity: false)
+                    HStack {
+                        Text(model.currentPage?.backgroundHex ??
+                             DashboardColors.backgroundHex(dark: model.config.darkMode))
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button(L("Usar fundo padrão", "Use default background")) {
+                            model.setPageBackground(page.id, hex: nil)
+                        }
+                        .buttonStyle(.link)
+                        .disabled(model.currentPage?.backgroundHex == nil)
                     }
-                    .buttonStyle(.link)
-                    .disabled(model.currentPage?.backgroundHex == nil)
+                    BackgroundImageControls(store: model.store,
+                        filename: Binding(
+                            get: { model.currentPage?.id == page.id ? model.currentPage?.backgroundImage ?? "" : page.backgroundImage ?? "" },
+                            set: { model.setPageBackgroundImage(page.id, filename: $0.isEmpty ? nil : $0) }),
+                        scale: Binding(
+                            get: { model.currentPage?.backgroundScale ?? "fill" },
+                            set: { model.setPageBackgroundPlacement(page.id, scale: $0) }),
+                        horizontal: Binding(
+                            get: { model.currentPage?.backgroundHorizontal ?? "center" },
+                            set: { model.setPageBackgroundPlacement(page.id, horizontal: $0) }),
+                        vertical: Binding(
+                            get: { model.currentPage?.backgroundVertical ?? "center" },
+                            set: { model.setPageBackgroundPlacement(page.id, vertical: $0) }))
                 }
-                BackgroundImageControls(store: model.store,
-                    filename: Binding(
-                        get: { model.currentPage?.id == page.id ? model.currentPage?.backgroundImage ?? "" : page.backgroundImage ?? "" },
-                        set: { model.setPageBackgroundImage(page.id, filename: $0.isEmpty ? nil : $0) }),
-                    scale: Binding(
-                        get: { model.currentPage?.backgroundScale ?? "fill" },
-                        set: { model.setPageBackgroundPlacement(page.id, scale: $0) }),
-                    horizontal: Binding(
-                        get: { model.currentPage?.backgroundHorizontal ?? "center" },
-                        set: { model.setPageBackgroundPlacement(page.id, horizontal: $0) }),
-                    vertical: Binding(
-                        get: { model.currentPage?.backgroundVertical ?? "center" },
-                        set: { model.setPageBackgroundPlacement(page.id, vertical: $0) }))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.trailing, 8)
@@ -537,11 +555,12 @@ struct EditorView: View {
                 Toggle(L("Mostrar segundos", "Show seconds"), isOn: pixelSwitch(tile, "clockShowSeconds"))
             }
 
-            if [.cpu, .memory, .network].contains(tile.kind) {
-                Toggle(L("Mostrar gráfico", "Show graph"), isOn: pixelSwitch(tile, "nativeShowGraph"))
+            if [.cpu, .memory, .network, .ssd].contains(tile.kind) {
+                Toggle(L("Mostrar gráfico", "Show graph"),
+                       isOn: pixelSwitch(tile, "nativeShowGraph", default: tile.kind != .ssd))
             }
 
-            if [.cpu, .memory].contains(tile.kind) {
+            if [.cpu, .memory, .ssd].contains(tile.kind) {
                 Stepper(value: Binding(
                     get: { min(100, max(50, Int(pixelSetting(tile, "nativeWarningAt", default: "85").wrappedValue) ?? 85)) },
                     set: { pixelSetting(tile, "nativeWarningAt", default: "85").wrappedValue = String($0) }
@@ -584,6 +603,7 @@ struct EditorView: View {
         case .cpu: return dark ? "#63C2FF" : "#1270B8"
         case .memory: return dark ? "#B894FF" : "#6E42B8"
         case .network: return dark ? "#59DBB8" : "#0A7D63"
+        case .ssd: return dark ? "#FFBA57" : "#AD610F"
         case .launcher: return dark ? "#ABE37A" : "#2E7A36"
         case .timer: return dark ? "#FDBA57" : "#A95A0B"
         default: return dark ? "#6BC9F0" : "#166A91"
@@ -593,7 +613,7 @@ struct EditorView: View {
     private func nativeBackgroundPicker(_ tile: Tile) -> some View {
         let value = tileBinding(tile.id, get: { $0.settings["nativeBackground"] ?? "" },
                                 set: { $0.settings["nativeBackground"] = $1 })
-        let fallback = [.clock, .cpu, .memory, .network].contains(tile.kind) ?
+        let fallback = [.clock, .cpu, .memory, .network, .ssd].contains(tile.kind) ?
             (model.config.darkMode ? "#101824" : "#F8FBFD") :
             (model.config.darkMode ? "#142033" : "#F8FBFD")
 
@@ -1010,13 +1030,14 @@ struct DashboardPreview: View {
             let boardHeight = boardWidth / 4
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
-                    Circle().fill(Color(red: 0.27, green: 0.83, blue: 0.60))
-                        .frame(width: 7, height: 7)
-                    Text(L("PRÉVIA AO VIVO", "LIVE PREVIEW"))
+                    Image(systemName: page.desktopMode == true ? "desktopcomputer" : "square.grid.3x3")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(palette.accent)
+                    Text(page.desktopMode == true ? L("ÁREA DE TRABALHO", "DESKTOP") : L("ORGANIZAÇÃO", "LAYOUT"))
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
                         .tracking(1.7)
                     Spacer()
-                    Text("16 × 4")
+                    Text(page.desktopMode == true ? "macOS" : "16 × 4")
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .foregroundStyle(palette.muted)
                         .padding(.horizontal, 8)
@@ -1025,9 +1046,37 @@ struct DashboardPreview: View {
                 }
                 .padding(.horizontal, 14)
                 .frame(height: 40)
-                BoardView(model: model, page: page, editing: true)
+                Group {
+                    if page.desktopMode == true {
+                        ZStack {
+                            LinearGradient(colors: [Color(red: 0.12, green: 0.22, blue: 0.37),
+                                                    Color(red: 0.08, green: 0.11, blue: 0.24)],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing)
+                            VStack(spacing: 0) {
+                                HStack(spacing: 7) {
+                                    Image(systemName: "apple.logo")
+                                    Text("Finder")
+                                    Spacer()
+                                    Image(systemName: "wifi")
+                                }
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 12)
+                                .frame(height: 25)
+                                .background(.white.opacity(0.14))
+                                Spacer(minLength: 0)
+                                Label(page.name, systemImage: "desktopcomputer")
+                                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(.white)
+                                Spacer(minLength: 0)
+                            }
+                        }
+                    } else {
+                        BoardView(model: model, page: page, editing: true)
+                            .background(DashboardBackdrop(page: page, dark: model.config.darkMode, store: model.store))
+                    }
+                }
                     .frame(width: boardWidth, height: boardHeight)
-                    .background(DashboardBackdrop(page: page, dark: model.config.darkMode, store: model.store))
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .overlay(RoundedRectangle(cornerRadius: 10)
                         .strokeBorder(palette.stroke, lineWidth: 1))
@@ -1035,7 +1084,12 @@ struct DashboardPreview: View {
                     .padding(.bottom, 10)
                 Spacer(minLength: 0)
             }
-            .background(palette.surface, in: RoundedRectangle(cornerRadius: 16))
+            .background {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(palette.surface)
+                    .contentShape(RoundedRectangle(cornerRadius: 16))
+                    .onTapGesture { model.selectedTileID = nil }
+            }
             .overlay(RoundedRectangle(cornerRadius: 16)
                 .strokeBorder(palette.stroke, lineWidth: 1))
         }

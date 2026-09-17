@@ -34,7 +34,6 @@ enum ActionDeckPreset {
     @Published private(set) var tilePreview: Tile?
     @Published private(set) var tilePreviewRejected = false
     @Published var message = ""
-    @Published var globalPageShortcutModifiers = "Control–Shift"
     @Published var deckMessage = ""
     @Published var libraryOpenRequest = 0
     @Published var calibration = false
@@ -61,18 +60,19 @@ enum ActionDeckPreset {
     var selectedTile: Tile? { currentPage?.tiles.first { $0.id == selectedTileID } }
 
     func selectProfile(_ id: UUID) {
-        guard let profile = config.profiles.first(where: { $0.id == id }), let first = profile.pages.first else { return }
+        guard let profile = config.profiles.first(where: { $0.id == id }),
+              let first = profile.pages.first(where: { $0.desktopMode != true }) ?? profile.pages.first else { return }
         cancelTilePreview()
         config.selectedProfileID = id
         config.selectedPageID = first.id
         selectedTileID = nil
     }
 
-    func selectPage(_ id: UUID) {
+    func selectPage(_ id: UUID, direction: Int? = nil) {
         guard let p = profileIndex,
               let destination = config.profiles[p].pages.firstIndex(where: { $0.id == id }),
               id != config.selectedPageID else { return }
-        pageNavigationDirection = destination < (pageIndex ?? destination) ? -1 : 1
+        pageNavigationDirection = direction ?? (destination < (pageIndex ?? destination) ? -1 : 1)
         cancelTilePreview()
         withAnimation(.easeInOut(duration: 0.32)) {
             config.selectedPageID = id
@@ -81,28 +81,32 @@ enum ActionDeckPreset {
     }
 
     func adjacentPageID(by offset: Int) -> UUID? {
-        guard let p = profileIndex, let q = pageIndex,
-              offset != 0,
-              config.profiles[p].pages.indices.contains(q + offset) else { return nil }
-        return config.profiles[p].pages[q + offset].id
+        guard let p = profileIndex, let q = pageIndex, offset != 0 else { return nil }
+        let pages = config.profiles[p].pages
+        guard pages.count > 1 else { return nil }
+        let next = (q + (offset % pages.count) + pages.count) % pages.count
+        guard next != q else { return nil }
+        return pages[next].id
     }
 
     @discardableResult func navigatePage(by offset: Int) -> Bool {
         guard let id = adjacentPageID(by: offset) else { return false }
-        selectPage(id)
+        selectPage(id, direction: offset > 0 ? 1 : -1)
         return true
     }
 
     func addProfile() {
+        let desktop = DashboardPage(name: L("Área de Trabalho", "Desktop"), desktopMode: true)
         let page = DashboardPage(name: L("Página 1", "Page 1"))
-        let profile = DashboardProfile(name: L("Perfil \(config.profiles.count + 1)", "Profile \(config.profiles.count + 1)"), pages: [page])
+        let profile = DashboardProfile(name: L("Perfil \(config.profiles.count + 1)", "Profile \(config.profiles.count + 1)"), pages: [desktop, page])
         config.profiles.append(profile)
         selectProfile(profile.id)
     }
 
     func addPage() {
         guard let p = profileIndex else { return }
-        let page = DashboardPage(name: L("Página \(config.profiles[p].pages.count + 1)", "Page \(config.profiles[p].pages.count + 1)"))
+        let number = config.profiles[p].pages.filter { $0.desktopMode != true }.count + 1
+        let page = DashboardPage(name: L("Página \(number)", "Page \(number)"))
         config.profiles[p].pages.append(page)
         selectPage(page.id)
     }
@@ -142,15 +146,17 @@ enum ActionDeckPreset {
     }
 
     func removePage(_ id: UUID) {
-        guard let p = profileIndex, config.profiles[p].pages.count > 1 else { return }
-        config.profiles[p].pages.removeAll { $0.id == id }
+        guard let p = profileIndex,
+              let index = config.profiles[p].pages.firstIndex(where: { $0.id == id }),
+              config.profiles[p].pages[index].desktopMode != true else { return }
+        config.profiles[p].pages.remove(at: index)
         if config.selectedPageID == id { selectPage(config.profiles[p].pages[0].id) }
     }
 
     func movePage(_ id: UUID, by offset: Int) {
         guard let p = profileIndex,
               let index = config.profiles[p].pages.firstIndex(where: { $0.id == id }),
-              (0..<config.profiles[p].pages.count).contains(index + offset) else { return }
+              index > 0, (1..<config.profiles[p].pages.count).contains(index + offset) else { return }
         config.profiles[p].pages.swapAt(index, index + offset)
     }
 
@@ -204,7 +210,8 @@ enum ActionDeckPreset {
 
     func addTile(_ kind: WidgetKind, importedID: UUID? = nil,
                  deckPreset: ActionDeckPreset = .compact) {
-        guard let p = profileIndex, let q = pageIndex else { return }
+        guard let p = profileIndex, let q = pageIndex,
+              config.profiles[p].pages[q].desktopMode != true else { return }
         let fullDeck = kind == .actionDeck && deckPreset == .fullPage
         let width: Int
         switch kind {

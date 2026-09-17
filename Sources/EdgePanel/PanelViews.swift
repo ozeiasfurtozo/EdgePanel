@@ -38,99 +38,25 @@ struct DashboardView: View {
         ZStack {
             DashboardBackdrop(page: page, dark: model.config.darkMode, store: model.store)
             if page.tiles.count == 1, let tile = page.tiles.first,
-               [.icue, .pixelClock, .pixelDash, .actionDeck].contains(tile.kind),
+               [.icue, .pixelClock, .pixelDash, .actionDeck, .web].contains(tile.kind),
                tile.x == 0, tile.y == 0, tile.width == 16, tile.height == 4 {
                 BoardView(model: model, page: page, editing: false)
             } else {
-                VStack(spacing: 0) {
-                    header(page: page, compact: compact)
-                        .frame(height: compact ? 52 : 76)
-                        .padding(.horizontal, compact ? 8 : 16)
-                        .padding(.top, compact ? 4 : 9)
-                        .padding(.bottom, compact ? 4 : 9)
-                    ZStack {
-                        BoardView(model: model, page: page, editing: false)
-                        if page.tiles.isEmpty {
-                            VStack(spacing: 8) {
-                                Image(systemName: "square.grid.2x2")
-                                    .font(.system(size: compact ? 30 : 48, weight: .ultraLight))
-                                Text(L("Esta página está pronta para widgets", "This page is ready for widgets"))
-                                    .font(.system(size: compact ? 15 : 21, weight: .medium, design: .rounded))
-                            }
-                            .foregroundStyle(DashboardColors.foreground(page: page, dark: model.config.darkMode).opacity(0.5))
+                ZStack {
+                    BoardView(model: model, page: page, editing: false)
+                    if page.tiles.isEmpty {
+                        VStack(spacing: 8) {
+                            Image(systemName: "square.grid.2x2")
+                                .font(.system(size: compact ? 30 : 48, weight: .ultraLight))
+                            Text(L("Esta página está pronta para widgets", "This page is ready for widgets"))
+                                .font(.system(size: compact ? 15 : 21, weight: .medium, design: .rounded))
                         }
+                        .foregroundStyle(DashboardColors.foreground(page: page, dark: model.config.darkMode).opacity(0.5))
                     }
-                    .padding(.horizontal, compact ? 8 : 16)
-                    .padding(.bottom, compact ? 8 : 16)
                 }
+                .padding(compact ? 8 : 16)
             }
         }
-    }
-
-    private func header(page: DashboardPage, compact: Bool) -> some View {
-        let ink = DashboardColors.foreground(page: page, dark: model.config.darkMode)
-        let light = DashboardColors.isLight(page: page, dark: model.config.darkMode)
-        return HStack(spacing: compact ? 9 : 15) {
-            EdgeMark()
-                .frame(width: compact ? 29 : 39, height: compact ? 29 : 39)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("EDGE / PANEL")
-                    .font(.system(size: compact ? 10 : 12, weight: .heavy, design: .monospaced))
-                    .tracking(compact ? 1.5 : 2.5)
-                    .foregroundStyle(DashboardColors.isLight(page: page, dark: model.config.darkMode) ?
-                        Color(red: 0.04, green: 0.43, blue: 0.54) : Color.cyan.opacity(0.85))
-                Text(page.name)
-                    .font(.system(size: compact ? 16 : 22, weight: .semibold, design: .rounded))
-                    .lineLimit(1)
-                    .foregroundStyle(ink)
-            }
-            Spacer(minLength: 8)
-            Text(L("\(page.tiles.count) WIDGETS", "\(page.tiles.count) WIDGETS"))
-                .font(.system(size: compact ? 9 : 11, weight: .bold, design: .monospaced))
-                .tracking(0.7)
-                .foregroundStyle(ink.opacity(0.7))
-                .padding(.horizontal, compact ? 7 : 10)
-                .padding(.vertical, compact ? 5 : 7)
-                .background(ink.opacity(0.08), in: Capsule())
-            TimelineView(.periodic(from: .now, by: 60)) { timeline in
-                Text(timeline.date, format: .dateTime.weekday(.abbreviated).day().month(.abbreviated).hour().minute())
-                    .font(.system(size: compact ? 10 : 13, weight: .medium, design: .monospaced))
-                    .foregroundStyle(ink.opacity(0.62))
-                    .lineLimit(1)
-            }
-            if let profile = model.config.profiles.first(where: { $0.id == model.config.selectedProfileID }),
-               let index = profile.pages.firstIndex(where: { $0.id == page.id }), profile.pages.count > 1 {
-                HStack(spacing: compact ? 2 : 5) {
-                    Button { model.navigatePage(by: -1) } label: {
-                        Image(systemName: "chevron.up")
-                            .frame(width: compact ? 30 : 36, height: compact ? 30 : 36)
-                    }
-                    .disabled(index == 0)
-                    .help(L("Página anterior · \(model.globalPageShortcutModifiers) ↑",
-                            "Previous page · \(model.globalPageShortcutModifiers) ↑"))
-                    Text(String(format: "%02d / %02d", index + 1, profile.pages.count))
-                        .font(.system(size: compact ? 10 : 12, weight: .bold, design: .monospaced))
-                        .frame(minWidth: compact ? 43 : 57)
-                    Button { model.navigatePage(by: 1) } label: {
-                        Image(systemName: "chevron.down")
-                            .frame(width: compact ? 30 : 36, height: compact ? 30 : 36)
-                    }
-                    .disabled(index == profile.pages.count - 1)
-                    .help(L("Próxima página · \(model.globalPageShortcutModifiers) ↓",
-                            "Next page · \(model.globalPageShortcutModifiers) ↓"))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(ink)
-                .background(ink.opacity(0.08),
-                            in: RoundedRectangle(cornerRadius: 11))
-            }
-        }
-        .padding(.horizontal, compact ? 12 : 20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(light ? Color.white.opacity(0.78) : Color.black.opacity(page.backgroundImage == nil ? 0.31 : 0.57),
-                    in: RoundedRectangle(cornerRadius: compact ? 12 : 17))
-        .overlay(RoundedRectangle(cornerRadius: compact ? 12 : 17)
-            .strokeBorder(light ? Color.black.opacity(0.10) : Color.white.opacity(0.14), lineWidth: 1))
     }
 }
 
@@ -248,7 +174,6 @@ struct BoardView: View {
                 if editing {
                     Color.clear
                         .contentShape(Rectangle())
-                        .onTapGesture { model.selectedTileID = nil }
                 }
                 if editing {
                     Path { path in
@@ -262,12 +187,19 @@ struct BoardView: View {
                         }
                     }
                     .stroke(.white.opacity(model.config.darkMode ? 0.08 : 0.15), lineWidth: 1)
+                    .allowsHitTesting(false)
                 }
                 ForEach(page.tiles) { tile in
                     let shown = model.displayedTile(tile)
-                    TileSurface(model: model, metrics: model.metrics, tile: shown, editing: editing)
-                        .frame(width: Double(shown.width) * cellW - (editing || ![.icue, .pixelClock, .pixelDash, .actionDeck].contains(shown.kind) ? 8 : 0),
-                               height: Double(shown.height) * cellH - (editing || ![.icue, .pixelClock, .pixelDash, .actionDeck].contains(shown.kind) ? 8 : 0))
+                    Group {
+                        if editing {
+                            EditorTilePlaceholder(model: model, tile: shown)
+                        } else {
+                            TileSurface(model: model, metrics: model.metrics, tile: shown, editing: false)
+                        }
+                    }
+                        .frame(width: Double(shown.width) * cellW - (editing || ![.icue, .pixelClock, .pixelDash, .actionDeck, .web].contains(shown.kind) ? 8 : 0),
+                               height: Double(shown.height) * cellH - (editing || ![.icue, .pixelClock, .pixelDash, .actionDeck, .web].contains(shown.kind) ? 8 : 0))
                         .overlay(alignment: .bottomTrailing) {
                             if editing && model.selectedTileID == tile.id {
                                 Image(systemName: "arrow.up.left.and.arrow.down.right")
@@ -275,6 +207,7 @@ struct BoardView: View {
                                     .foregroundStyle(model.tilePreviewRejected ? .red : .cyan)
                                     .padding(8)
                                     .background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 8))
+                                    .allowsHitTesting(false)
                             }
                         }
                         .gesture(editing ? DragGesture(minimumDistance: 4, coordinateSpace: .named("edge-board"))
@@ -287,15 +220,28 @@ struct BoardView: View {
                                   y: (Double(shown.y) + Double(shown.height) / 2) * cellH)
                 }
             }
+            .contentShape(Rectangle())
             .coordinateSpace(name: "edge-board")
+            .simultaneousGesture(editing ? SpatialTapGesture(coordinateSpace: .named("edge-board"))
+                .onEnded { value in
+                    let hitTile = page.tiles.contains { tile in
+                        let shown = model.displayedTile(tile)
+                        let frame = CGRect(x: Double(shown.x) * cellW + 4,
+                                           y: Double(shown.y) * cellH + 4,
+                                           width: Double(shown.width) * cellW - 8,
+                                           height: Double(shown.height) * cellH - 8)
+                        return frame.contains(value.location)
+                    }
+                    if !hitTile { model.selectedTileID = nil }
+                } : nil)
         }
     }
 
     private func previewDrag(_ value: DragGesture.Value, tile: Tile, cellW: CGFloat, cellH: CGFloat) {
         let localX = value.startLocation.x - Double(tile.x) * cellW
         let localY = value.startLocation.y - Double(tile.y) * cellH
-        let resize = localX > Double(tile.width) * cellW - 42 &&
-            localY > Double(tile.height) * cellH - 42 && model.selectedTileID == tile.id
+        let resize = localX > Double(tile.width) * cellW - 32 &&
+            localY > Double(tile.height) * cellH - 32 && model.selectedTileID == tile.id
         model.previewTile(tile.id) { update in
             if resize {
                 update.width += Int((value.translation.width / cellW).rounded())
@@ -308,6 +254,37 @@ struct BoardView: View {
     }
 }
 
+private struct EditorTilePlaceholder: View {
+    @ObservedObject var model: AppModel
+    let tile: Tile
+
+    var body: some View {
+        let dark = model.config.darkMode
+        let selected = model.selectedTileID == tile.id
+        let accent = model.tilePreviewRejected && selected ? Color.red : Color.cyan
+
+        RoundedRectangle(cornerRadius: 10)
+            .fill(dark ? Color(red: 0.10, green: 0.15, blue: 0.22).opacity(0.92) : Color.white.opacity(0.9))
+            .overlay {
+                Text(tile.title)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(dark ? Color.white.opacity(0.85) : Color(red: 0.08, green: 0.14, blue: 0.20))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.7)
+                    .multilineTextAlignment(.center)
+                    .padding(8)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(selected ? accent : (dark ? Color.white.opacity(0.16) : Color.black.opacity(0.13)),
+                                  lineWidth: selected ? 2 : 1)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 10))
+            .onTapGesture { model.selectedTileID = tile.id }
+            .accessibilityLabel(tile.title)
+    }
+}
+
 struct TileSurface: View {
     @ObservedObject var model: AppModel
     @ObservedObject var metrics: SystemMetrics
@@ -315,7 +292,7 @@ struct TileSurface: View {
     let editing: Bool
 
     private var customBackground: HexColor? {
-        guard [.clock, .cpu, .memory, .network, .timer, .web].contains(tile.kind) else { return nil }
+        guard [.clock, .cpu, .memory, .network, .ssd, .timer].contains(tile.kind) else { return nil }
         return HexColor(hex: tile.settings["nativeBackground"])
     }
 
@@ -363,6 +340,14 @@ struct TileSurface: View {
                 .gesture(editing ? TapGesture().onEnded { model.selectedTileID = tile.id } : nil)
         } else if !editing && tile.kind == .icue {
             content(compact: false).frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if tile.kind == .web {
+            if !tile.value.isEmpty {
+                WebTileView(urlString: tile.value)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                Text(L("Configure o endereço no editor", "Set the address in the editor"))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         } else if tile.kind == .launcher {
             ApplicationWidget(tile: tile, editing: editing,
                               ink: DashboardColors.foreground(page: model.currentPage, dark: model.config.darkMode))
@@ -375,7 +360,7 @@ struct TileSurface: View {
                     }
                 }
                 .gesture(editing ? TapGesture().onEnded { model.selectedTileID = tile.id } : nil)
-        } else if [.clock, .cpu, .memory, .network].contains(tile.kind) {
+        } else if [.clock, .cpu, .memory, .network, .ssd].contains(tile.kind) {
             styledContent
         } else {
             framedContent
@@ -425,6 +410,8 @@ struct TileSurface: View {
                              settings: NativeClockSettings(tile.settings))
         case .cpu, .memory, .network:
             PerformanceWidget(tile: tile, metrics: metrics, compact: compact, dark: dark)
+        case .ssd:
+            StorageWidget(tile: tile, metrics: metrics, compact: compact, dark: dark)
         default:
             EmptyView()
         }
@@ -499,7 +486,7 @@ struct TileSurface: View {
 
     @ViewBuilder private func content(compact: Bool) -> some View {
         switch tile.kind {
-        case .clock, .cpu, .memory, .network, .launcher:
+        case .clock, .cpu, .memory, .network, .ssd, .launcher:
             EmptyView() // These native tiles use styledContent instead of the generic frame.
         case .pixelClock:
             PixelClockTile(settings: PixelClockSettings(tile.settings))
@@ -511,8 +498,7 @@ struct TileSurface: View {
             TimerTile(editing: editing, compact: compact, initialMinutes: max(1, Int(tile.value) ?? 5),
                       accent: cardAccent).id(tile.value)
         case .web:
-            if !tile.value.isEmpty { WebTileView(urlString: tile.value).clipShape(RoundedRectangle(cornerRadius: 8)) }
-            else { Text(L("Configure o endereço no editor", "Set the address in the editor")).foregroundStyle(surfaceInk.opacity(0.65)) }
+            EmptyView() // Web renders directly in TileSurface to fill its entire cell.
         case .icue:
             if let imported = model.imported(tile.importedID), imported.compatible {
                 ImportedWidgetView(tile: tile, imported: imported, libraryURL: model.store.libraryURL,
@@ -533,6 +519,7 @@ struct TileSurface: View {
         case .cpu: fallback = Color(red: 0.39, green: 0.76, blue: 1)
         case .memory: fallback = Color(red: 0.72, green: 0.58, blue: 1)
         case .network: fallback = Color(red: 0.35, green: 0.86, blue: 0.72)
+        case .ssd: fallback = Color(red: 1, green: 0.73, blue: 0.34)
         case .launcher: fallback = Color(red: 0.67, green: 0.89, blue: 0.48)
         case .web, .icue: fallback = model.config.darkMode ?
             Color(red: 0.42, green: 0.79, blue: 0.94) : Color(red: 0.08, green: 0.42, blue: 0.57)
@@ -549,6 +536,7 @@ struct TileSurface: View {
         case .cpu: return "cpu"
         case .memory: return "memorychip"
         case .network: return "network"
+        case .ssd: return "internaldrive"
         case .launcher: return "app"
         case .timer: return "timer"
         case .web: return "globe"

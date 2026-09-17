@@ -11,7 +11,6 @@ import Foundation
     private var previous: EventHotKeyRef?
     private var next: EventHotKeyRef?
     private(set) var failedDirections: [Int] = []
-    private(set) var usesFallback = false
 
     init(model: AppModel) { self.model = model }
 
@@ -27,14 +26,7 @@ import Foundation
             return
         }
         failedDirections = []
-        usesFallback = Self.systemReservesPrimaryShortcut()
-        registerPair(modifiers: usesFallback ? Self.fallbackModifiers : Self.primaryModifiers)
-        if !usesFallback && !failedDirections.isEmpty {
-            unregisterKeys()
-            failedDirections = []
-            usesFallback = true
-            registerPair(modifiers: Self.fallbackModifiers)
-        }
+        registerPair(modifiers: Self.pageModifiers)
     }
 
     func stop() {
@@ -42,11 +34,9 @@ import Foundation
         if let handler { RemoveEventHandler(handler) }
         handler = nil
         failedDirections = []
-        usesFallback = false
     }
 
-    private static let primaryModifiers = UInt32(controlKey) | UInt32(shiftKey)
-    private static let fallbackModifiers = UInt32(controlKey) | UInt32(optionKey)
+    private static let pageModifiers = UInt32(controlKey) | UInt32(optionKey)
 
     private func registerPair(modifiers: UInt32) {
         previous = register(keyCode: UInt32(kVK_UpArrow), id: 1, direction: -1, modifiers: modifiers)
@@ -71,25 +61,6 @@ import Foundation
             NSLog("EdgePanel: could not register page hotkey %d (status %d)", direction, status)
         }
         return reference
-    }
-
-    static func systemReservesPrimaryShortcut() -> Bool {
-        let shortcuts = UserDefaults(suiteName: "com.apple.symbolichotkeys")?
-            .dictionary(forKey: "AppleSymbolicHotKeys") ?? [:]
-        return systemReservesPrimaryShortcut(in: shortcuts)
-    }
-
-    static func systemReservesPrimaryShortcut(in shortcuts: [String: Any]) -> Bool {
-        let modifiers = Int(NSEvent.ModifierFlags.control.rawValue | NSEvent.ModifierFlags.shift.rawValue)
-        let arrows = [Int(kVK_UpArrow), Int(kVK_DownArrow)]
-        return shortcuts.values.contains { raw in
-            guard let shortcut = raw as? [String: Any],
-                  (shortcut["enabled"] as? NSNumber)?.boolValue == true,
-                  let value = shortcut["value"] as? [String: Any],
-                  let parameters = value["parameters"] as? [NSNumber],
-                  parameters.count >= 3 else { return false }
-            return arrows.contains(parameters[1].intValue) && parameters[2].intValue == modifiers
-        }
     }
 
     fileprivate func received(id: EventHotKeyID) {

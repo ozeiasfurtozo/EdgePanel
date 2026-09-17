@@ -1,7 +1,7 @@
 import Foundation
 
 enum WidgetKind: String, Codable, CaseIterable, Identifiable {
-    case clock, pixelClock, pixelDash, cpu, memory, network, launcher, actionDeck, timer, web, icue
+    case clock, pixelClock, pixelDash, cpu, memory, network, ssd, launcher, actionDeck, timer, web, icue
     var id: String { rawValue }
 
     var title: String {
@@ -12,6 +12,7 @@ enum WidgetKind: String, Codable, CaseIterable, Identifiable {
         case .cpu: return "CPU"
         case .memory: return L("Memória", "Memory")
         case .network: return L("Rede", "Network")
+        case .ssd: return "SSD"
         case .launcher: return L("Aplicativo", "Application")
         case .actionDeck: return L("Deck de Ações", "Action Deck")
         case .timer: return "Timer"
@@ -57,6 +58,7 @@ struct DashboardPage: Codable, Identifiable, Equatable {
     var backgroundScale: String? = nil
     var backgroundHorizontal: String? = nil
     var backgroundVertical: String? = nil
+    var desktopMode: Bool? = nil
 }
 
 struct DashboardProfile: Codable, Identifiable, Equatable {
@@ -89,7 +91,29 @@ struct DashboardConfig: Codable {
     var touchOrientation = TouchOrientation()
     var launchAtLogin = false
 
+    @discardableResult mutating func ensureDesktopPage() -> Bool {
+        var changed = false
+        for index in profiles.indices {
+            var pages = profiles[index].pages
+            if let desktopIndex = pages.firstIndex(where: { $0.desktopMode == true }) {
+                let desktop = pages.remove(at: desktopIndex)
+                for duplicate in pages.indices where pages[duplicate].desktopMode == true {
+                    pages[duplicate].desktopMode = nil
+                }
+                pages.insert(desktop, at: 0)
+            } else {
+                pages.insert(DashboardPage(name: L("Área de Trabalho", "Desktop"), desktopMode: true), at: 0)
+            }
+            if pages != profiles[index].pages {
+                profiles[index].pages = pages
+                changed = true
+            }
+        }
+        return changed
+    }
+
     static func initial() -> DashboardConfig {
+        let desktop = DashboardPage(name: L("Área de Trabalho", "Desktop"), desktopMode: true)
         let page = DashboardPage(name: L("Página 1", "Page 1"), tiles: [
             Tile(kind: .clock, x: 0, y: 0, width: 4, height: 2),
             Tile(kind: .cpu, x: 4, y: 0, width: 3, height: 2),
@@ -97,7 +121,7 @@ struct DashboardConfig: Codable {
             Tile(kind: .network, x: 10, y: 0, width: 6, height: 2),
             Tile(kind: .timer, x: 0, y: 2, width: 4, height: 2),
         ])
-        let profile = DashboardProfile(name: L("Principal", "Main"), pages: [page])
+        let profile = DashboardProfile(name: L("Principal", "Main"), pages: [desktop, page])
         return DashboardConfig(profiles: [profile], selectedProfileID: profile.id, selectedPageID: page.id)
     }
 }

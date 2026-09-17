@@ -16,7 +16,8 @@ This checklist requires a Mac with the physical XENEON EDGE and its USB touch co
 ## Dashboard and widgets
 
 - Add, drag, resize, and remove each native tile. Confirm overlap is prevented and settings survive relaunch.
-- Create two profiles and multiple pages; switch between them in the editor and EdgePanel menu-bar icon. Close the editor and reopen it from the Dock.
+- Create two profiles and multiple pages; switch between them in the editor and EdgePanel menu-bar icon. Close the editor and reopen it from the menu-bar icon.
+- Confirm every profile starts with a fixed Desktop page 0 that has no add, move, or delete controls. Select it and confirm it reveals the XENEON's native desktop and menu bar, receives mouse/touch input there, and returns to the widget window through Control–Option–Up/Down or the menu-bar menu, even while another app is focused. Confirm both arrow shortcuts loop from the last page to the first and back. Repeat after relaunch and when the display is reconnected.
 - Test launcher with an installed `.app`, timer controls, clock, CPU/RAM values, network traffic, and a web URL.
 - Disconnect the video display while leaving USB connected. Confirm the dashboard closes and touch does not target another monitor.
 - Record the original **Hardware brightness**, move the slider to a different value, and confirm this only previews the value. Click **Apply**, then restore the original value and apply again. Confirm the XENEON's physical luminance changes, the other monitor does not, and the value reloads after reopening the editor. Change brightness externally and use the refresh button. Unplug the XENEON with an unapplied value and confirm no other monitor receives a command.

@@ -2,6 +2,36 @@ import Foundation
 import Darwin
 import Combine
 
+struct StorageSnapshot: Equatable {
+    let volumeName: String
+    let totalBytes: Int64
+    let availableBytes: Int64
+
+    init?(volumeName: String, totalBytes: Int64, availableBytes: Int64) {
+        guard totalBytes > 0, availableBytes >= 0, availableBytes <= totalBytes else { return nil }
+        self.volumeName = volumeName
+        self.totalBytes = totalBytes
+        self.availableBytes = availableBytes
+    }
+
+    var usedBytes: Int64 { totalBytes - availableBytes }
+    var usedPercent: Double { 100 * Double(usedBytes) / Double(totalBytes) }
+
+    static func read(at url: URL = URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)) -> StorageSnapshot? {
+        guard let values = try? url.resourceValues(forKeys: [
+            .volumeTotalCapacityKey, .volumeAvailableCapacityKey, .volumeLocalizedNameKey
+        ]), let total = values.volumeTotalCapacity, let available = values.volumeAvailableCapacity else {
+            return nil
+        }
+        return StorageSnapshot(volumeName: values.volumeLocalizedName ?? L("Disco de inicialização", "Startup disk"),
+                               totalBytes: Int64(total), availableBytes: Int64(available))
+    }
+
+    static func formatted(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+}
+
 @MainActor final class SystemMetrics: ObservableObject {
     @Published private(set) var cpuPercent = 0.0
     @Published private(set) var memoryPercent = 0.0
@@ -12,12 +42,15 @@ import Combine
     @Published private(set) var memoryHistory: [Double] = []
     @Published private(set) var downloadHistory: [Double] = []
     @Published private(set) var uploadHistory: [Double] = []
+    @Published private(set) var storageSnapshot: StorageSnapshot?
+    @Published private(set) var storageHistory: [Double] = []
 
     private let historyLimit = 90
 
     private var timer: Timer?
     private var previousCPU: (busy: UInt64, total: UInt64)?
     private var previousNetwork: (received: UInt64, sent: UInt64, time: Date)?
+    private var sampleNumber = 0
 
     init() {
         sample()
@@ -27,6 +60,12 @@ import Combine
     }
 
     private func sample() {
+        if sampleNumber.isMultiple(of: 5) {
+            storageSnapshot = StorageSnapshot.read()
+            if let storageSnapshot { append(storageSnapshot.usedPercent, to: &storageHistory) }
+        }
+        sampleNumber += 1
+
         var cpuUpdated = false
         var cpu = host_cpu_load_info_data_t()
         var count = mach_msg_type_number_t(MemoryLayout<host_cpu_load_info_data_t>.size / MemoryLayout<integer_t>.size)

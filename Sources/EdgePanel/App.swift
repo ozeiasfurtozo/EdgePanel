@@ -28,18 +28,14 @@ import SwiftUI
     private var pendingImports: [URL] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.regular)
+        NSApp.setActivationPolicy(.accessory)
         configureUpdater()
         installAppMenu()
         makeEditor()
         pageHotkeys.start()
-        model.globalPageShortcutModifiers = pageHotkeys.usesFallback ? "Control–Option" : "Control–Shift"
         if !pageHotkeys.failedDirections.isEmpty {
             model.message = L("Atalhos globais de página indisponíveis. Verifique conflitos em Ajustes do Sistema → Teclado → Atalhos.",
                               "Global page shortcuts are unavailable. Check for conflicts in System Settings → Keyboard → Keyboard Shortcuts.")
-        } else if pageHotkeys.usesFallback {
-            model.message = L("Control–Shift–↑/↓ está reservado pelo macOS. Fora do EdgePanel, use Control–Option–↑/↓ para trocar de página.",
-                              "macOS reserves Control–Shift–Up/Down. Outside EdgePanel, use Control–Option–Up/Down to switch pages.")
         }
         let status = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let url = Bundle.main.url(forResource: "StatusIcon", withExtension: "png"),
@@ -114,8 +110,6 @@ import SwiftUI
         return true
     }
 
-    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? { actionsMenu(includeQuit: false) }
-
     private func installAppMenu() {
         let mainMenu = NSMenu()
         let appItem = NSMenuItem(title: "EdgePanel", action: nil, keyEquivalent: "")
@@ -137,13 +131,13 @@ import SwiftUI
         let previous = NSMenuItem(title: L("Página anterior", "Previous page"),
                                   action: #selector(previousPage(_:)),
                                   keyEquivalent: String(UnicodeScalar(NSUpArrowFunctionKey)!))
-        previous.keyEquivalentModifierMask = [.control, .shift]
+        previous.keyEquivalentModifierMask = [.control, .option]
         previous.target = self
         pageMenu.addItem(previous)
         let next = NSMenuItem(title: L("Próxima página", "Next page"),
                               action: #selector(nextPage(_:)),
                               keyEquivalent: String(UnicodeScalar(NSDownArrowFunctionKey)!))
-        next.keyEquivalentModifierMask = [.control, .shift]
+        next.keyEquivalentModifierMask = [.control, .option]
         next.target = self
         pageMenu.addItem(next)
         pageItem.submenu = pageMenu
@@ -160,7 +154,6 @@ import SwiftUI
     private func actionsMenu(includeQuit: Bool) -> NSMenu {
         let menu = NSMenu()
         menu.addItem(withTitle: L("Abrir editor", "Open editor"), action: #selector(showEditor), keyEquivalent: includeQuit ? "e" : "").target = self
-        menu.addItem(withTitle: L("Mostrar painel", "Show dashboard"), action: #selector(showDashboard), keyEquivalent: includeQuit ? "d" : "").target = self
         menu.addItem(.separator())
         let updateItem = menu.addItem(withTitle: L("Verificar atualizações…", "Check for Updates…"), action: #selector(checkForUpdates), keyEquivalent: "")
         if let updaterController {
@@ -186,12 +179,12 @@ import SwiftUI
 
     private func makeEditor() {
         let window = NSWindow(contentRect: CGRect(x: 100, y: 100, width: 1120, height: 760),
-                              styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                              styleMask: [.titled, .closable, .resizable],
                               backing: .buffered, defer: false)
         window.title = "EdgePanel · XENEON EDGE"
         window.minSize = NSSize(width: 1000, height: 700)
         window.center()
-        // The menu and Dock reopen this same window after the close button is used.
+        // The status-bar menu reopens this same window after the close button is used.
         window.isReleasedWhenClosed = false
         window.contentView = NSHostingView(rootView: EditorView(model: model, touch: model.touch))
         editorWindowController = NSWindowController(window: window)
@@ -209,10 +202,15 @@ import SwiftUI
             dashboardWindow = nil
             return
         }
+        if model.currentPage?.desktopMode == true {
+            dashboardWindow?.orderOut(nil)
+            return
+        }
         if let window = dashboardWindow {
             if window.frame != display.screen.frame {
                 window.setFrame(display.screen.frame, display: true)
             }
+            if !window.isVisible { window.orderFrontRegardless() }
             return
         }
         let window = DashboardWindow(contentRect: display.screen.frame, styleMask: [.borderless], backing: .buffered, defer: false)
@@ -234,12 +232,6 @@ import SwiftUI
                                      action: nil, keyEquivalent: "")
             warning.isEnabled = false
             menu.addItem(warning)
-        } else if pageHotkeys.usesFallback {
-            let shortcut = NSMenuItem(title: L("Páginas globais: Control–Option–↑/↓",
-                                               "Global pages: Control–Option–Up/Down"),
-                                      action: nil, keyEquivalent: "")
-            shortcut.isEnabled = false
-            menu.addItem(shortcut)
         }
         menu.addItem(.separator())
         for profile in model.config.profiles {
@@ -272,10 +264,6 @@ import SwiftUI
         if editorWindowController?.window == nil { makeEditor() }
         editorWindowController?.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
-    }
-    @objc private func showDashboard() {
-        syncDashboard()
-        dashboardWindow?.orderFrontRegardless()
     }
     @objc private func checkForUpdates() {
         guard let updaterController else {

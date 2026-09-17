@@ -1,6 +1,6 @@
 # In-app updates
 
-EdgePanel 0.8.4 introduces Sparkle 2.10.0. **EdgePanel → Check for Updates…** is available from the app menu and the menu-bar icon. Sparkle checks the HTTPS appcast at `https://raw.githubusercontent.com/ozeiasfurtozo/EdgePanel/main/appcast.xml`, verifies the EdDSA signature on each download, and installs an accepted update over the existing app. The private signing key is stored in the publisher's macOS Keychain under the `edgepanel` account; the public key is in `Resources/Info.plist`.
+EdgePanel 0.8.4 introduces Sparkle 2.10.0. **Check for Updates…** is available from the menu-bar icon. Sparkle checks the HTTPS appcast at `https://raw.githubusercontent.com/ozeiasfurtozo/EdgePanel/main/appcast.xml`, verifies the EdDSA signature on each download, and installs an accepted update over the existing app. The private signing key is stored in the publisher's macOS Keychain under the `edgepanel` account; the public key is in `Resources/Info.plist`.
 
 The appcast in this repository is initially empty. It must be committed to the `main` branch before checks can succeed. A new release will not appear in the app until the signed DMG is uploaded to GitHub Releases **and** the generated `appcast.xml` is committed to `main`. Users of 0.8.3 or earlier need one manual install of 0.8.4 or newer because those builds did not contain Sparkle. Users can copy the new app over `/Applications/EdgePanel.app`; they do not need to delete the old app or erase settings.
 

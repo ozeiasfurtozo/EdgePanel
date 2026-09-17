@@ -260,6 +260,98 @@ struct PerformanceWidget: View {
     }
 }
 
+struct StorageWidget: View {
+    let tile: Tile
+    @ObservedObject var metrics: SystemMetrics
+    let compact: Bool
+    let dark: Bool
+
+    private var ink: Color {
+        dark ? .white : Color(red: 0.08, green: 0.13, blue: 0.19)
+    }
+
+    private var accent: Color {
+        PixelClockSettings.color(tile.settings["nativeAccent"] ?? "", fallback:
+            dark ? Color(red: 1, green: 0.73, blue: 0.34) : Color(red: 0.68, green: 0.38, blue: 0.06))
+    }
+
+    private var warningAt: Double {
+        Double(min(100, max(50, Int(tile.settings["nativeWarningAt"] ?? "") ?? 85)))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: compact ? 5 : 11) {
+            HStack(spacing: compact ? 5 : 8) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(accent)
+                    .frame(width: compact ? 3 : 4, height: compact ? 11 : 15)
+                Text(tile.title.uppercased())
+                    .font(.system(size: compact ? 9 : 12, weight: .bold, design: .monospaced))
+                    .tracking(compact ? 0.7 : 1.5)
+                    .lineLimit(1)
+                    .foregroundStyle(ink.opacity(0.76))
+                Spacer(minLength: 3)
+                Text(metrics.storageSnapshot?.volumeName.uppercased() ?? L("INDISPONÍVEL", "UNAVAILABLE"))
+                    .font(.system(size: compact ? 8 : 10, weight: .medium, design: .monospaced))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .foregroundStyle(ink.opacity(0.52))
+            }
+
+            if let storage = metrics.storageSnapshot {
+                let used = storage.usedPercent
+                let activeAccent = used >= warningAt ? Color(red: 1, green: 0.43, blue: 0.31) : accent
+
+                HStack(alignment: .firstTextBaseline, spacing: 2) {
+                    Text("\(Int(used.rounded()))")
+                        .font(.system(size: compact ? 31 : 60, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                    Text("%")
+                        .font(.system(size: compact ? 15 : 25, weight: .medium, design: .rounded))
+                        .foregroundStyle(activeAccent)
+                    Spacer(minLength: 2)
+                    Text("\(StorageSnapshot.formatted(storage.availableBytes)) \(L("LIVRES", "FREE"))")
+                        .font(.system(size: compact ? 9 : 14, weight: .medium, design: .monospaced))
+                        .foregroundStyle(ink.opacity(0.6))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
+                }
+                .foregroundStyle(ink)
+
+                if tile.settings["nativeShowGraph"] == "true" {
+                    Sparkline(values: metrics.storageHistory, ceiling: 100, accent: activeAccent)
+                        .frame(maxHeight: .infinity)
+                        .accessibilityHidden(true)
+                } else {
+                    Spacer(minLength: 0)
+                    SegmentedGauge(value: used, accent: activeAccent, compact: compact,
+                                   inactive: ink.opacity(0.12))
+                }
+
+                HStack {
+                    Text("\(StorageSnapshot.formatted(storage.usedBytes)) \(L("USADOS", "USED"))")
+                    Spacer(minLength: 2)
+                    Text("\(StorageSnapshot.formatted(storage.totalBytes)) TOTAL")
+                }
+                .font(.system(size: compact ? 8 : 10, weight: .medium, design: .monospaced))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .foregroundStyle(ink.opacity(0.5))
+            } else {
+                Spacer(minLength: 0)
+                Text("—")
+                    .font(.system(size: compact ? 31 : 60, weight: .semibold, design: .rounded))
+                    .foregroundStyle(ink.opacity(0.7))
+                Text(L("Não foi possível ler o espaço do disco", "Could not read disk capacity"))
+                    .font(.system(size: compact ? 9 : 12, weight: .medium, design: .monospaced))
+                    .foregroundStyle(ink.opacity(0.5))
+                Spacer(minLength: 0)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
 private struct NetworkChannel: View {
     let label: String
     let symbol: String
